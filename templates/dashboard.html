@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <h2>我的 MLB Fantasy 聯盟</h2>
+    {% if leagues %}
+    <table>
+        <thead>
+            <tr><th>聯盟名稱</th><th>賽季</th><th>隊數</th><th>操作</th></tr>
+        </thead>
+        <tbody>
+        {% for league in leagues %}
+        <tr>
+            <td>{{ league.name }}</td>
+            <td>{{ league.season }}</td>
+            <td>{{ league.num_teams }} 隊</td>
+            <td>
+                <a href="{{ url_for('draft', league_key=league.league_key) }}" class="btn btn-primary" style="margin-right:8px">選秀助手</a>
+                <a href="{{ url_for('team', league_key=league.league_key) }}" class="btn btn-outline" style="margin-right:8px">我的隊伍</a>
+                <a href="{{ url_for('h2h_analysis', league_key=league.league_key) }}" class="btn btn-outline" style="margin-right:8px">H2H 分析</a>
+                <a href="{{ url_for('players', league_key=league.league_key) }}" class="btn btn-outline" style="margin-right:8px">球員總覽</a>
+                <a href="{{ url_for('schedule', league_key=league.league_key) }}" class="btn btn-outline" style="margin-right:8px">週賽程</a>
+                <a href="{{ url_for('free_agents', league_key=league.league_key) }}" class="btn btn-outline" style="margin-right:8px">自由球員</a>
+                <a href="{{ url_for('trades', league_key=league.league_key) }}" class="btn btn-outline" style="margin-right:8px">交易建議</a>
+                <a href="{{ url_for('rankings', league_key=league.league_key) }}" class="btn btn-outline">球員排名</a>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty">找不到 MLB Fantasy 聯盟。請確認你有加入 Yahoo Fantasy Baseball 聯盟。</div>
+    {% endif %}
+</div>
+{% endblock %}

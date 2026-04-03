@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+/* ── Layout ── */
+.rnk-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:16px; }
+.rnk-title  { color:#a855f7; margin:0; font-size:1.2rem; }
+
+/* ── Position tabs ── */
+.pos-tabs   { display:flex; flex-wrap:wrap; gap:6px; }
+.pos-tab    { padding:5px 14px; border-radius:20px; cursor:pointer; font-size:0.82rem;
+              border:1px solid #2a2a4a; background:#0f0f1a; color:#aaa; transition:all .15s; }
+.pos-tab:hover  { border-color:#6001d2; color:#c084fc; }
+.pos-tab.active { background:#6001d2; color:#fff; border-color:#6001d2; font-weight:600; }
+
+/* ── Table wrapper ── */
+.rnk-wrap   { overflow-x:auto; border-radius:12px; border:1px solid #2a2a4a; }
+#rnk-table  { width:100%; border-collapse:collapse; font-size:0.83rem; }
+#rnk-table thead tr { background:#1a1a2e; position:sticky; top:0; z-index:2; }
+#rnk-table th { padding:10px 10px; color:#888; font-weight:600; text-align:center;
+                border-bottom:1px solid #2a2a4a; white-space:nowrap; cursor:pointer; user-select:none; }
+#rnk-table th:hover { color:#c084fc; }
+#rnk-table th.sorted-asc::after  { content:" ▲"; color:#a855f7; }
+#rnk-table th.sorted-desc::after { content:" ▼"; color:#a855f7; }
+#rnk-table td { padding:7px 10px; text-align:center; border-bottom:1px solid #12121f; white-space:nowrap; }
+#rnk-table tr:hover td { background:#1a1a2e66; }
+#rnk-table td.name-cell { text-align:left; max-width:180px; }
+
+/* ── Badges ── */
+.pos-badge  { display:inline-block; padding:2px 7px; border-radius:10px; font-size:0.72rem;
+              font-weight:600; background:#1f1f3a; color:#94a3b8; }
+.val-badge  { display:inline-block; padding:2px 8px; border-radius:10px; font-size:0.78rem; font-weight:700; }
+
+/* ── Loading ── */
+.loading-overlay { position:fixed; inset:0; background:#0f0f1acc; display:flex;
+                   align-items:center; justify-content:center; z-index:100; }
+.spinner { width:40px; height:40px; border:3px solid #2a2a4a; border-top-color:#6001d2;
+           border-radius:50%; animation:spin .8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ── Stats row ── */
+.player-img { width:26px; height:26px; border-radius:50%; object-fit:cover; margin-right:6px; vertical-align:middle; }
+.player-name { font-weight:600; color:#e2e8f0; }
+.rnk-count  { font-size:0.75rem; color:#555; margin-left:12px; }
+</style>
+
+<!-- Loading overlay -->
+<div id="loadingOverlay" class="loading-overlay">
+    <div style="text-align:center">
+        <div class="spinner" style="margin:0 auto 16px"></div>
+        <div style="color:#888">正在載入球員排名資料...</div>
+        <div style="color:#555;font-size:0.8rem;margin-top:8px">首次載入約需 15-25 秒</div>
+    </div>
+</div>
+
+<div class="rnk-header">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <h2 class="rnk-title" id="rnk-title">球員排名</h2>
+        <span class="rnk-count" id="rnk-count"></span>
+    </div>
+    <div style="font-size:0.75rem;color:#555">
+        Z分 = 2025整季成績 z-score 總分 ｜ VALUE = ADP排名 − 系統排名（正值=低估）
+    </div>
+</div>
+
+<!-- Position tabs -->
+<div class="pos-tabs" style="margin-bottom:16px" id="pos-tabs">
+    <button class="pos-tab active" data-pos="ALL">全部</button>
+    <button class="pos-tab" data-pos="C">C</button>
+    <button class="pos-tab" data-pos="1B">1B</button>
+    <button class="pos-tab" data-pos="2B">2B</button>
+    <button class="pos-tab" data-pos="3B">3B</button>
+    <button class="pos-tab" data-pos="SS">SS</button>
+    <button class="pos-tab" data-pos="OF">OF</button>
+    <button class="pos-tab" data-pos="SP">SP</button>
+    <button class="pos-tab" data-pos="RP">RP</button>
+</div>
+
+<!-- Table -->
+<div class="rnk-wrap" id="rnk-wrap" style="display:none">
+    <table id="rnk-table">
+        <thead><tr id="rnk-thead-row"></tr></thead>
+        <tbody id="rnk-tbody"></tbody>
+    </table>
+</div>
+
+<script>
+const BATTING_CATS  = ['R','HR','RBI','SB','AVG'];
+const PITCHING_CATS = ['W','SV','K','ERA','WHIP'];
+const PITCHER_POS   = new Set(['SP','RP']);
+
+let allPlayers = [];
+let currentPos = 'ALL';
+let sortCol    = 'rank';
+let sortAsc    = true;
+
+// ── Fetch ─────────────────────────────────────────────────────
+async function loadData() {
+    try {
+        const r = await fetch('/api/rankings/{{ league_key }}');
+        const d = await r.json();
+        if (d.error) { alert('錯誤: ' + d.error); return; }
+        allPlayers = d.players;
+        document.getElementById('loadingOverlay').style.display = 'none';
+        document.getElementById('rnk-wrap').style.display = 'block';
+        render();
+    } catch(e) {
+        alert('載入失敗: ' + e);
+    }
+}
+
+// ── Filter + sort ─────────────────────────────────────────────
+function filtered() {
+    let list = allPlayers;
+    if (currentPos !== 'ALL') {
+        list = list.filter(p => p.eligible_positions.includes(currentPos));
+    }
+    return sortList(list);
+}
+
+function sortList(list) {
+    return [...list].sort((a, b) => {
+        let av = colVal(a, sortCol);
+        let bv = colVal(b, sortCol);
+        // null → end
+        if (av === null && bv === null) return 0;
+        if (av === null) return 1;
+        if (bv === null) return -1;
+        return sortAsc ? (av - bv) : (bv - av);
+    });
+}
+
+function colVal(p, col) {
+    if (col === 'rank')    return p.rank;
+    if (col === 'adp')     return p.adp !== null ? p.adp : null;
+    if (col === 'value')   return p.value !== null ? p.value : null;
+    if (col === 'z_score') return p.z_score;
+    // category z-score
+    const z = p.cats[col];
+    return (z !== undefined && z !== null) ? z : null;
+}
+
+// ── Columns ───────────────────────────────────────────────────
+function getCols(pos) {
+    if (PITCHER_POS.has(pos)) return { bat:[], pit: PITCHING_CATS };
+    if (pos === 'ALL')        return { bat: BATTING_CATS, pit: PITCHING_CATS };
+    return { bat: BATTING_CATS, pit:[] };
+}
+
+// ── Render ────────────────────────────────────────────────────
+function render() {
+    const pos   = currentPos;
+    const cols  = getCols(pos);
+    const full  = filtered();
+    const limit = pos === 'ALL' ? 100 : 50;
+    const list  = full.slice(0, limit);
+    const label = pos === 'ALL' ? '全部球員' : `${pos}`;
+    document.getElementById('rnk-title').textContent = `${label} 排名（Top ${limit}）`;
+    document.getElementById('rnk-count').textContent = `顯示 ${list.length} / ${full.length} 人`;
+
+    // Header
+    const fixedCols = [
+        { key:'rank',    label:'SYS' },
+        { key:'name',    label:'球員',   nosort:true },
+        { key:'team',    label:'隊伍',   nosort:true },
+        { key:'pos',     label:'位置',   nosort:true },
+        { key:'adp',     label:'ADP' },
+        { key:'value',   label:'VALUE' },
+        { key:'z_score', label:'Z分' },
+    ];
+    const catCols = [...cols.bat, ...cols.pit].map(c => ({ key:c, label:c }));
+    const allCols = [...fixedCols, ...catCols];
+
+    const headRow = document.getElementById('rnk-thead-row');
+    headRow.innerHTML = allCols.map(c => {
+        if (c.nosort) return `<th>${c.label}</th>`;
+        const cls = sortCol === c.key ? (sortAsc ? 'sorted-asc' : 'sorted-desc') : '';
+        return `<th class="${cls}" data-col="${c.key}">${c.label}</th>`;
+    }).join('');
+
+    // Attach sort listeners
+    headRow.querySelectorAll('th[data-col]').forEach(th => {
+        th.addEventListener('click', () => {
+            const col = th.dataset.col;
+            if (sortCol === col) sortAsc = !sortAsc;
+            else { sortCol = col; sortAsc = col === 'rank' || col === 'adp'; }
+            render();
+        });
+    });
+
+    // Rows
+    const tbody = document.getElementById('rnk-tbody');
+    tbody.innerHTML = list.map((p, i) => {
+        const localRank = i + 1;
+
+        // VALUE badge
+        let valueBadge = '<span style="color:#444">—</span>';
+        if (p.value !== null) {
+            const v = p.value;
+            const str = v > 0 ? `+${v}` : `${v}`;
+            let bg, color;
+            if      (v >= 100) { bg='#16a34a33'; color='#4ade80'; }
+            else if (v >= 30)  { bg='#16a34a22'; color='#86efac'; }
+            else if (v >= 10)  { bg='#16a34a11'; color='#bbf7d0'; }
+            else if (v > -10)  { bg='#55555522'; color='#9ca3af'; }
+            else if (v > -30)  { bg='#dc262611'; color='#fca5a5'; }
+            else if (v > -100) { bg='#dc262622'; color='#f87171'; }
+            else               { bg='#dc262633'; color='#ef4444'; }
+            valueBadge = `<span class="val-badge" style="background:${bg};color:${color}">${str}</span>`;
+        }
+
+        // ADP
+        const adpStr = p.adp !== null ? p.adp : '<span style="color:#444">—</span>';
+
+        // Z-score color
+        const zColor = zc(p.z_score);
+
+        // Category cells
+        const catCells = [...cols.bat, ...cols.pit].map(cat => {
+            const z = p.cats[cat];
+            if (z === undefined || z === null) return '<td style="color:#333">—</td>';
+            return `<td style="color:${zc(z)};font-size:0.8rem">${z.toFixed(2)}</td>`;
+        }).join('');
+
+        // Headshot
+        const img = p.headshot
+            ? `<img src="${p.headshot}" class="player-img" onerror="this.style.display='none'">`
+            : `<span style="display:inline-block;width:26px;height:26px;border-radius:50%;background:#2a2a4a;margin-right:6px;vertical-align:middle"></span>`;
+
+        // Position badges (eligible_positions, exclude BN/IL/Util)
+        const ep = (p.eligible_positions || [])
+            .filter(x => !['BN','IL','Util'].includes(x))
+            .slice(0,3)
+            .map(x => `<span class="pos-badge">${x}</span>`)
+            .join(' ');
+
+        return `<tr>
+            <td style="color:#6001d2;font-weight:700">${localRank}</td>
+            <td class="name-cell">${img}<span class="player-name">${esc(p.name)}</span></td>
+            <td style="color:#64b5f6;font-size:0.8rem">${esc(p.team)}</td>
+            <td>${ep}</td>
+            <td style="color:#94a3b8">${adpStr}</td>
+            <td>${valueBadge}</td>
+            <td style="color:${zColor};font-weight:700">${p.z_score}</td>
+            ${catCells}
+        </tr>`;
+    }).join('');
+}
+
+function zc(z) {
+    if (z === null || z === undefined) return '#444';
+    if (z >= 2.5)  return '#4ade80';
+    if (z >= 1.5)  return '#86efac';
+    if (z >= 0.5)  return '#bbf7d0';
+    if (z >= -0.5) return '#94a3b8';
+    if (z >= -1.5) return '#fca5a5';
+    return '#f87171';
+}
+
+function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Tab switch ────────────────────────────────────────────────
+document.getElementById('pos-tabs').addEventListener('click', e => {
+    const btn = e.target.closest('.pos-tab');
+    if (!btn) return;
+    document.querySelectorAll('.pos-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentPos = btn.dataset.pos;
+    sortCol = 'rank';
+    sortAsc = true;
+    render();
+});
+
+loadData();
+</script>
+{% endblock %}

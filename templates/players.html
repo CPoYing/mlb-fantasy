@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="tab-bar">
+    <a href="{{ url_for('dashboard') }}" class="btn btn-outline">我的聯盟</a>
+    <a href="{{ url_for('players', league_key=league_key) }}" class="btn btn-primary">球員總覽</a>
+    <a href="{{ url_for('rankings', league_key=league_key) }}" class="btn btn-outline">球員排名</a>
+    <a href="{{ url_for('schedule', league_key=league_key) }}" class="btn btn-outline">週賽程</a>
+    <a href="{{ url_for('h2h_analysis', league_key=league_key) }}" class="btn btn-outline">H2H 分析</a>
+</div>
+
+<div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+        <div>
+            <h2 style="margin:0">聯盟球員總覽</h2>
+            {% if total is defined %}
+            <div style="color:#555;font-size:0.8rem;margin-top:4px">
+                共 {{ total }} 位球員 · 顯示 {{ start+1 }}–{{ [start+50, total]|min }}
+            </div>
+            {% endif %}
+        </div>
+        <form method="get" style="display:flex;gap:8px;flex-wrap:wrap">
+            <select name="position" onchange="this.form.submit()">
+                <option value="ALL" {% if position=='ALL' %}selected{% endif %}>所有位置</option>
+                <option value="C"   {% if position=='C'   %}selected{% endif %}>捕手 (C)</option>
+                <option value="1B"  {% if position=='1B'  %}selected{% endif %}>一壘 (1B)</option>
+                <option value="2B"  {% if position=='2B'  %}selected{% endif %}>二壘 (2B)</option>
+                <option value="3B"  {% if position=='3B'  %}selected{% endif %}>三壘 (3B)</option>
+                <option value="SS"  {% if position=='SS'  %}selected{% endif %}>游擊 (SS)</option>
+                <option value="OF"  {% if position=='OF'  %}selected{% endif %}>外野 (OF)</option>
+                <option value="SP"  {% if position=='SP'  %}selected{% endif %}>先發投手 (SP)</option>
+                <option value="RP"  {% if position=='RP'  %}selected{% endif %}>後援投手 (RP)</option>
+            </select>
+            <select name="sort" onchange="this.form.submit()">
+                <option value="z_score" {% if sort=='z_score' %}selected{% endif %}>Z分綜合排名</option>
+                <option value="R"       {% if sort=='R'       %}selected{% endif %}>得分 (R)</option>
+                <option value="HR"      {% if sort=='HR'      %}selected{% endif %}>全壘打 (HR)</option>
+                <option value="RBI"     {% if sort=='RBI'     %}selected{% endif %}>打點 (RBI)</option>
+                <option value="SB"      {% if sort=='SB'      %}selected{% endif %}>盜壘 (SB)</option>
+                <option value="AVG"     {% if sort=='AVG'     %}selected{% endif %}>打擊率 (AVG)</option>
+                <option value="ERA"     {% if sort=='ERA'     %}selected{% endif %}>防禦率 (ERA)</option>
+                <option value="WHIP"    {% if sort=='WHIP'    %}selected{% endif %}>WHIP</option>
+                <option value="K"       {% if sort=='K'       %}selected{% endif %}>三振 (K)</option>
+                <option value="SV"      {% if sort=='SV'      %}selected{% endif %}>救援 (SV)</option>
+                <option value="W"       {% if sort=='W'       %}selected{% endif %}>勝投 (W)</option>
+            </select>
+            <input type="hidden" name="start" value="0">
+        </form>
+    </div>
+
+    {% if players %}
+    <div style="overflow-x:auto">
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th colspan="2">球員</th>
+                <th>位置</th>
+                <th>球隊</th>
+                <th style="color:#a855f7">Z分</th>
+                <th>優點</th>
+                <th>缺點</th>
+                <th>關鍵成績</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for p in players %}
+        <tr>
+            <td style="color:#555;font-size:0.85rem">{{ start + loop.index }}</td>
+            <td style="width:40px">
+                {% if p.headshot %}
+                <img src="{{ p.headshot }}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;background:#2a2a4a">
+                {% endif %}
+            </td>
+            <td style="font-weight:bold">{{ p.name }}</td>
+            <td><span class="badge badge-purple">{{ p.position }}</span></td>
+            <td style="color:#94a3b8">{{ p.team }}</td>
+            <td style="font-weight:700;color:
+                {% if p.z_score >= 8 %}#4ade80
+                {% elif p.z_score >= 4 %}#86efac
+                {% elif p.z_score >= 0 %}#94a3b8
+                {% else %}#f87171{% endif %}">
+                {{ "%.2f"|format(p.z_score) }}
+            </td>
+            <td>
+                {% for s in p.analysis.strengths %}
+                <span class="badge badge-green" style="margin:2px;font-size:0.75rem">{{ s }}</span>
+                {% endfor %}
+            </td>
+            <td>
+                {% for w in p.analysis.weaknesses %}
+                <span class="badge" style="background:#dc2626;color:white;margin:2px;font-size:0.75rem">{{ w }}</span>
+                {% endfor %}
+            </td>
+            <td style="font-size:0.85rem;color:#aaa">
+                {% if p.is_batter %}
+                    {% if p.stats.get('AVG') is not none %}AVG {{ "%.3f"|format(p.stats.AVG) }}{% endif %}
+                    {% if p.stats.get('HR')  is not none %} · {{ p.stats.HR|int }}HR{% endif %}
+                    {% if p.stats.get('RBI') is not none %} · {{ p.stats.RBI|int }}RBI{% endif %}
+                    {% if p.stats.get('SB')  is not none %} · {{ p.stats.SB|int }}SB{% endif %}
+                    {% if p.stats.get('R')   is not none %} · {{ p.stats.R|int }}R{% endif %}
+                {% else %}
+                    {% if p.stats.get('ERA')  is not none %}ERA {{ "%.2f"|format(p.stats.ERA) }}{% endif %}
+                    {% if p.stats.get('WHIP') is not none %} · WHIP {{ "%.2f"|format(p.stats.WHIP) }}{% endif %}
+                    {% if p.stats.get('K')    is not none %} · {{ p.stats.K|int }}K{% endif %}
+                    {% if p.stats.get('W')    is not none %} · {{ p.stats.W|int }}W{% endif %}
+                    {% if p.stats.get('SV')   is not none and p.stats.SV > 0 %} · {{ p.stats.SV|int }}SV{% endif %}
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:20px;justify-content:center;align-items:center">
+        {% if start > 0 %}
+        <a href="?position={{ position }}&sort={{ sort }}&start={{ [start-50, 0]|max }}" class="btn btn-outline">上一頁</a>
+        {% endif %}
+        <span style="color:#555;font-size:0.85rem">第 {{ (start//50)+1 }} 頁</span>
+        {% if total is defined and start + 50 < total %}
+        <a href="?position={{ position }}&sort={{ sort }}&start={{ start+50 }}" class="btn btn-primary">下一頁</a>
+        {% elif players|length == 50 %}
+        <a href="?position={{ position }}&sort={{ sort }}&start={{ start+50 }}" class="btn btn-primary">下一頁</a>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="empty">找不到球員資料</div>
+    {% endif %}
+</div>
+{% endblock %}

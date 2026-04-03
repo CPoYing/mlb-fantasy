@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="tab-bar">
+    <a href="{{ url_for('team', league_key=league_key) }}" class="btn btn-outline">我的隊伍</a>
+    <a href="{{ url_for('matchup', league_key=league_key) }}" class="btn btn-outline">對戰分析</a>
+    <a href="{{ url_for('free_agents', league_key=league_key) }}" class="btn btn-outline">自由球員</a>
+    <a href="{{ url_for('trades', league_key=league_key) }}" class="btn btn-primary">交易建議</a>
+</div>
+
+<div class="card">
+    <h2>交易建議</h2>
+    <p style="color:#888;font-size:0.9rem;margin-bottom:20px">根據各隊陣容分析，以下是可能有利的交易方向：</p>
+
+    {% if suggestions %}
+        {% for s in suggestions %}
+        <div class="suggestion-item">
+            <div style="color:#a855f7;font-weight:bold;margin-bottom:4px">{{ s.team }}</div>
+            <div style="color:#ccc;font-size:0.95rem">{{ s.suggestion }}</div>
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="empty">目前沒有明顯的交易機會，或是 API 資料尚未載入。</div>
+    {% endif %}
+</div>
+{% endblock %}

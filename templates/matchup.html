@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="tab-bar">
+    <a href="{{ url_for('team', league_key=league_key) }}" class="btn btn-outline">我的隊伍</a>
+    <a href="{{ url_for('matchup', league_key=league_key) }}" class="btn btn-primary">對戰分析</a>
+    <a href="{{ url_for('free_agents', league_key=league_key) }}" class="btn btn-outline">自由球員</a>
+    <a href="{{ url_for('trades', league_key=league_key) }}" class="btn btn-outline">交易建議</a>
+</div>
+
+<div class="card">
+    <h2>第 {{ matchup.week or '-' }} 週 對戰</h2>
+    {% if matchup and matchup.teams %}
+    <div class="vs-box">
+        {% set my_team_data = matchup.teams | selectattr('team_key', 'equalto', my_team.team_key) | list %}
+        {% set opp_teams = matchup.teams | rejectattr('team_key', 'equalto', my_team.team_key) | list %}
+
+        {% for t in matchup.teams %}
+        {% if t.team_key == my_team.team_key %}
+        <div class="vs-team">
+            <div style="color:#888;font-size:0.85rem;margin-bottom:8px">我的隊伍</div>
+            <div class="name">{{ t.name }}</div>
+            <div class="pts">{{ t.points }}</div>
+            <div style="color:#888;font-size:0.8rem;margin-top:4px">分</div>
+        </div>
+        {% endif %}
+        {% endfor %}
+
+        <div class="vs-sep">VS</div>
+
+        {% for t in matchup.teams %}
+        {% if t.team_key != my_team.team_key %}
+        <div class="vs-team">
+            <div style="color:#888;font-size:0.85rem;margin-bottom:8px">對手</div>
+            <div class="name">{{ t.name }}</div>
+            <div class="pts">{{ t.points }}</div>
+            <div style="color:#888;font-size:0.8rem;margin-top:4px">分</div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+    {% set my_pts = [] %}
+    {% set opp_pts = [] %}
+    {% for t in matchup.teams %}
+        {% if t.team_key == my_team.team_key %}{% set _ = my_pts.append(t.points|float) %}{% endif %}
+        {% if t.team_key != my_team.team_key %}{% set _ = opp_pts.append(t.points|float) %}{% endif %}
+    {% endfor %}
+
+    {% if my_pts and opp_pts %}
+    <div style="text-align:center;margin-top:20px">
+        {% if my_pts[0] > opp_pts[0] %}
+        <span class="badge badge-green" style="font-size:1rem;padding:8px 20px">目前領先 ✓</span>
+        {% elif my_pts[0] < opp_pts[0] %}
+        <span class="badge" style="background:#dc2626;color:white;font-size:1rem;padding:8px 20px">目前落後</span>
+        {% else %}
+        <span class="badge badge-yellow" style="font-size:1rem;padding:8px 20px">平手</span>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="empty">本週無對戰資料</div>
+    {% endif %}
+</div>
+{% endblock %}

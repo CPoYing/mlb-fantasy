@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="tab-bar">
+    <a href="{{ url_for('team', league_key=league_key) }}" class="btn btn-primary">我的隊伍</a>
+    <a href="{{ url_for('matchup', league_key=league_key) }}" class="btn btn-outline">對戰分析</a>
+    <a href="{{ url_for('free_agents', league_key=league_key) }}" class="btn btn-outline">自由球員</a>
+    <a href="{{ url_for('trades', league_key=league_key) }}" class="btn btn-outline">交易建議</a>
+</div>
+
+<div class="card">
+    <h2>{{ team.name }}</h2>
+    <div class="stat-grid">
+        <div class="stat-box"><div class="val">{{ team.rank or '-' }}</div><div class="lbl">排名</div></div>
+        <div class="stat-box"><div class="val">{{ team.wins or '-' }}</div><div class="lbl">勝</div></div>
+        <div class="stat-box"><div class="val">{{ team.losses or '-' }}</div><div class="lbl">負</div></div>
+        <div class="stat-box"><div class="val">{{ team.points or '-' }}</div><div class="lbl">總分</div></div>
+    </div>
+</div>
+
+{% if stats %}
+<div class="card">
+    <h2>本週成績</h2>
+    <div class="stat-grid">
+        {% for key, val in stats.items() %}
+        <div class="stat-box"><div class="val">{{ val }}</div><div class="lbl">{{ key }}</div></div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>名單 ({{ roster|length }} 人)</h2>
+    <table>
+        <thead>
+            <tr><th>球員</th><th>位置</th><th>球隊</th><th>上場位置</th></tr>
+        </thead>
+        <tbody>
+        {% for p in roster %}
+        <tr>
+            <td>{{ p.name }}</td>
+            <td><span class="badge badge-purple">{{ p.position }}</span></td>
+            <td>{{ p.team }}</td>
+            <td>{{ p.selected_position }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="tab-bar">
+    <a href="{{ url_for('dashboard') }}" class="btn btn-outline">我的聯盟</a>
+    <a href="{{ url_for('players', league_key=league_key) }}" class="btn btn-outline">球員總覽</a>
+    <a href="{{ url_for('schedule', league_key=league_key) }}" class="btn btn-primary">週賽程</a>
+    <a href="{{ url_for('h2h_analysis', league_key=league_key) }}" class="btn btn-outline">H2H 分析</a>
+</div>
+
+<div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+        <h2>MLB 週出賽賽程</h2>
+        <form method="get">
+            <select name="week" onchange="this.form.submit()" style="min-width:180px">
+                {% for wk, wd in weeks.items() %}
+                <option value="{{ wk }}" {% if wk == selected_week %}selected{% endif %}>
+                    第 {{ loop.index }} 週 {{ wd.label }}{% if wk == current_week %} ◀ 本週{% endif %}
+                </option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+
+    {% if week_data %}
+    <p style="color:#888;font-size:0.9rem;margin-bottom:16px">
+        出賽場數越多對 H2H 越有利 — 可優先選場數多的球隊球員
+    </p>
+
+    <!-- Game count heatmap -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px">
+        {% for abbr, info in sorted_teams %}
+        {% set count = info.count %}
+        {% if count >= 7 %}
+            {% set bg = "#16a34a" %}
+        {% elif count >= 6 %}
+            {% set bg = "#ca8a04" %}
+        {% elif count >= 5 %}
+            {% set bg = "#2a2a4a" %}
+        {% else %}
+            {% set bg = "#1a1a1a" %}
+        {% endif %}
+        <div style="background:{{ bg }};border-radius:8px;padding:12px;text-align:center;border:1px solid #333">
+            <div style="font-size:1.3rem;font-weight:bold;color:white">{{ abbr }}</div>
+            <div style="font-size:2rem;font-weight:bold;color:white;margin:4px 0">{{ count }}</div>
+            <div style="font-size:0.7rem;color:rgba(255,255,255,0.7)">場</div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div style="display:flex;gap:16px;margin-top:20px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:16px;height:16px;background:#16a34a;border-radius:4px"></div>
+            <span style="font-size:0.85rem;color:#aaa">7+ 場（絕佳週）</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:16px;height:16px;background:#ca8a04;border-radius:4px"></div>
+            <span style="font-size:0.85rem;color:#aaa">6 場（良好週）</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:16px;height:16px;background:#2a2a4a;border-radius:4px"></div>
+            <span style="font-size:0.85rem;color:#aaa">5 場（普通週）</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:16px;height:16px;background:#1a1a1a;border-radius:4px"></div>
+            <span style="font-size:0.85rem;color:#aaa">4 場以下（少）</span>
+        </div>
+    </div>
+    {% else %}
+    <div class="empty">此週無賽程資料</div>
+    {% endif %}
+</div>
+
+<!-- Best teams this week -->
+{% if sorted_teams %}
+<div class="card">
+    <h2>本週推薦優先考慮的球隊</h2>
+    <p style="color:#888;font-size:0.9rem;margin-bottom:16px">以下球隊本週出賽場次較多，這些球隊的球員可優先起用或收購：</p>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+        {% for abbr, info in sorted_teams[:10] %}
+        {% if info.count >= 6 %}
+        <div style="background:#1f1f3a;border:1px solid #6001d2;border-radius:8px;padding:8px 16px">
+            <span style="color:#a855f7;font-weight:bold">{{ abbr }}</span>
+            <span style="color:#888;font-size:0.85rem;margin-left:8px">{{ info.count }} 場</span>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

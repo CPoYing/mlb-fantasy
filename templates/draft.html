@@ -1,0 +1,340 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+.draft-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.draft-card { background:#1a1a2e; border:1px solid #2a2a4a; border-radius:12px; padding:16px; }
+.draft-card h3 { color:#a855f7; font-size:1rem; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+.pick-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid #1f1f3a; font-size:0.82rem; }
+.pick-row.mine { background:#1f0f3a; border-radius:6px; padding:5px 8px; }
+.rec-card { padding:10px; border:1px solid #2a2a4a; border-radius:8px; margin-bottom:8px; }
+.rec-card:hover { border-color:#6001d2; }
+.rec-rank { font-size:1.4rem; font-weight:bold; color:#6001d2; min-width:28px; }
+.rec-name { font-weight:bold; font-size:0.95rem; }
+.rec-stats { font-size:0.75rem; color:#888; margin-top:3px; }
+.reason-tag { display:inline-block; padding:2px 8px; border-radius:10px; font-size:0.7rem; font-weight:bold; margin:2px; }
+.reason-bpa   { background:#16a34a22; color:#4ade80; border:1px solid #16a34a; }
+.reason-pos   { background:#ca8a0422; color:#fbbf24; border:1px solid #ca8a04; }
+.reason-cat   { background:#1d4ed822; color:#60a5fa; border:1px solid #1d4ed8; }
+.reason-scar  { background:#dc262622; color:#f87171; border:1px solid #dc2626; }
+.reason-adp   { background:#71717122; color:#d1d5db; border:1px solid #4b5563; }
+.reason-warn  { background:#7c2d1222; color:#fb923c; border:1px solid #9a3412; }
+.cat-bar-row  { display:flex; align-items:center; gap:8px; margin:3px 0; font-size:0.75rem; }
+.cat-bar-bg   { flex:1; background:#0f0f1a; border-radius:4px; height:6px; overflow:hidden; }
+.cat-bar-fill { height:100%; border-radius:4px; transition:width 0.4s; }
+.pos-tab      { padding:5px 12px; border-radius:6px; cursor:pointer; font-size:0.8rem; border:1px solid #2a2a4a; background:#0f0f1a; color:#aaa; }
+.pos-tab.active { background:#6001d2; color:white; border-color:#6001d2; }
+.pos-avail-row { display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid #1f1f3a; font-size:0.82rem; }
+.pulse { width:8px; height:8px; background:#22c55e; border-radius:50%; animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.need-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:0.72rem; border:1px solid #ca8a04; background:#ca8a0422; color:#fbbf24; margin:2px; }
+.loading-overlay { position:fixed; inset:0; background:#0f0f1a99; display:flex; align-items:center; justify-content:center; z-index:100; }
+.spinner { width:40px; height:40px; border:3px solid #2a2a4a; border-top-color:#6001d2; border-radius:50%; animation:spin 0.8s linear infinite; }
+@keyframes spin { to{transform:rotate(360deg)} }
+</style>
+
+<!-- Loading overlay -->
+<div id="loadingOverlay" class="loading-overlay">
+    <div style="text-align:center">
+        <div class="spinner" style="margin:0 auto 16px"></div>
+        <div style="color:#888">正在載入球員資料和 ADP 排名...</div>
+        <div style="color:#555;font-size:0.8rem;margin-top:8px">首次載入約需 10-20 秒</div>
+    </div>
+</div>
+
+<!-- Status bar -->
+<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+    <div style="display:flex;align-items:center;gap:12px">
+        <h2 style="color:#a855f7;margin:0">選秀助手</h2>
+        <span id="draftStatusBadge" class="badge badge-yellow">載入中...</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;font-size:0.85rem;color:#888">
+        <span id="draftInfo">—</span>
+        <div style="display:flex;align-items:center;gap:6px">
+            <div class="pulse"></div>
+            <span id="refreshCountdown">自動更新</span>
+        </div>
+    </div>
+</div>
+
+<!-- Main 3-column grid -->
+<div class="draft-grid">
+
+    <!-- LEFT: Draft board -->
+    <div class="draft-card" style="max-height:520px;overflow:hidden;display:flex;flex-direction:column">
+        <h3>選秀板 <span id="totalPicksBadge" style="font-size:0.75rem;color:#555"></span></h3>
+        <div id="draftBoard" style="overflow-y:auto;flex:1">
+            <div style="color:#555;text-align:center;padding:20px">等待選秀開始...</div>
+        </div>
+    </div>
+
+    <!-- CENTER: My roster -->
+    <div class="draft-card" style="max-height:520px;overflow-y:auto">
+        <h3>我的陣容</h3>
+        <div id="positionNeeds" style="margin-bottom:12px"></div>
+        <div id="myRoster">
+            <div style="color:#555;text-align:center;padding:20px">尚未選秀</div>
+        </div>
+        <div id="catBalance" style="margin-top:12px"></div>
+    </div>
+
+    <!-- RIGHT: Recommendations -->
+    <div class="draft-card" style="max-height:520px;overflow-y:auto">
+        <h3>推薦名單</h3>
+        <div id="recommendations">
+            <div style="color:#555;text-align:center;padding:20px">計算中...</div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Available by position -->
+<div class="draft-card" style="margin-top:16px">
+    <h3>各位置可用球員</h3>
+    <div id="posTabs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+        {% for pos in ['C','1B','2B','3B','SS','OF','SP','RP'] %}
+        <button class="pos-tab {% if pos == 'C' %}active{% endif %}" onclick="switchPos('{{ pos }}')">{{ pos }}</button>
+        {% endfor %}
+    </div>
+    <div id="posAvailTable">
+        <div style="color:#555;text-align:center;padding:20px">載入中...</div>
+    </div>
+</div>
+
+<script>
+const LEAGUE_KEY = "{{ league_key }}";
+let currentPos = "C";
+let availByPos = {};
+let pollTimer = null;
+let countdown = 12;
+
+// ── Reason tag classifier ──────────────────────────────────────
+function reasonClass(r) {
+    if (r.includes("BPA"))       return "reason-bpa";
+    if (r.includes("空缺"))       return "reason-pos";
+    if (r.includes("補強"))       return "reason-cat";
+    if (r.includes("稀缺") || r.includes("剩餘")) return "reason-scar";
+    if (r.includes("快被選走"))   return "reason-warn";
+    return "reason-adp";
+}
+
+// ── Draft board ────────────────────────────────────────────────
+function renderDraftBoard(board) {
+    const el = document.getElementById("draftBoard");
+    if (!board || board.length === 0) {
+        el.innerHTML = '<div style="color:#555;text-align:center;padding:20px">等待選秀開始...</div>';
+        return;
+    }
+    // Show latest picks at top
+    const rows = [...board].reverse().map(pick => {
+        const mine = pick.is_mine;
+        return `<div class="pick-row${mine ? ' mine' : ''}">
+            <span style="color:#555;min-width:40px">R${pick.round}P${pick.pick % 14 || 14}</span>
+            <span class="badge badge-purple" style="font-size:0.65rem;padding:1px 6px">${pick.position}</span>
+            <span style="${mine ? 'color:#a855f7;font-weight:bold' : ''}">${pick.player_name}</span>
+            <span style="color:#555;font-size:0.75rem;margin-left:auto">${mine ? '✓ 我' : pick.team_name}</span>
+        </div>`;
+    }).join("");
+    el.innerHTML = rows;
+}
+
+// ── My roster ─────────────────────────────────────────────────
+function renderMyRoster(roster, needs, weakCats) {
+    // Position needs
+    const needsEl = document.getElementById("positionNeeds");
+    if (needs && needs.length > 0) {
+        needsEl.innerHTML = `<div style="color:#888;font-size:0.75rem;margin-bottom:4px">待補位置：</div>` +
+            needs.map(p => `<span class="need-badge">${p}</span>`).join("");
+    } else {
+        needsEl.innerHTML = "";
+    }
+
+    const el = document.getElementById("myRoster");
+    if (!roster || roster.length === 0) {
+        el.innerHTML = '<div style="color:#555;text-align:center;padding:20px">尚未選秀</div>';
+        return;
+    }
+    el.innerHTML = roster.map(p => {
+        const s = p.stats || {};
+        const isBatter = p.is_batter;
+        let statStr = isBatter
+            ? [s.AVG ? `AVG ${s.AVG.toFixed(3)}` : "", s.HR ? `${Math.round(s.HR)}HR` : "", s.RBI ? `${Math.round(s.RBI)}RBI` : "", s.SB ? `${Math.round(s.SB)}SB` : ""].filter(Boolean).join(" · ")
+            : [s.ERA ? `ERA ${s.ERA.toFixed(2)}` : "", s.WHIP ? `WHIP ${s.WHIP.toFixed(2)}` : "", s.K ? `${Math.round(s.K)}K` : "", s.SV > 0 ? `${Math.round(s.SV)}SV` : ""].filter(Boolean).join(" · ");
+        const val = p.base_value || 0;
+        const valColor = val > 2 ? "#4ade80" : val > 0 ? "#fbbf24" : "#f87171";
+        return `<div style="padding:6px 0;border-bottom:1px solid #1f1f3a;display:flex;align-items:center;gap:8px">
+            <span class="badge badge-purple" style="font-size:0.65rem;min-width:28px;text-align:center">${p.position}</span>
+            <div style="flex:1;min-width:0">
+                <div style="font-size:0.85rem;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+                <div style="font-size:0.72rem;color:#888">${statStr || "—"}</div>
+            </div>
+            <span style="font-size:0.8rem;color:${valColor};font-weight:bold">${val > 0 ? '+' : ''}${val.toFixed(1)}</span>
+        </div>`;
+    }).join("");
+
+    // Category balance bars
+    renderCatBalance(window._lastCatBalance || {}, weakCats);
+}
+
+function renderCatBalance(balance, weakCats) {
+    const el = document.getElementById("catBalance");
+    const cats = ["R","HR","RBI","SB","AVG","W","SV","K","ERA","WHIP"];
+    const maxAbs = Math.max(...cats.map(c => Math.abs(balance[c] || 0)), 1);
+    el.innerHTML = `<div style="color:#888;font-size:0.75rem;margin-bottom:6px">類別強弱：</div>` +
+        cats.filter(c => balance[c] !== undefined).map(c => {
+            const z = balance[c] || 0;
+            const pct = Math.min(100, Math.abs(z) / maxAbs * 100);
+            const color = weakCats.includes(c) ? "#ef4444" : z > 1 ? "#22c55e" : "#a855f7";
+            const dir = z >= 0 ? "left" : "left";
+            return `<div class="cat-bar-row">
+                <span style="min-width:36px;color:${weakCats.includes(c) ? '#f87171' : '#aaa'}">${c}</span>
+                <div class="cat-bar-bg">
+                    <div class="cat-bar-fill" style="width:${pct}%;background:${color}"></div>
+                </div>
+                <span style="min-width:36px;text-align:right;color:${color}">${z > 0 ? '+' : ''}${z.toFixed(1)}</span>
+            </div>`;
+        }).join("");
+}
+
+// ── Recommendations ────────────────────────────────────────────
+function renderRecommendations(recs) {
+    const el = document.getElementById("recommendations");
+    if (!recs || recs.length === 0) {
+        el.innerHTML = '<div style="color:#555;text-align:center;padding:20px">計算中...</div>';
+        return;
+    }
+    el.innerHTML = recs.map((r, i) => {
+        const s = r.stats || {};
+        const isBatter = r.is_batter;
+        let statStr = isBatter
+            ? [s.AVG ? `AVG ${s.AVG.toFixed(3)}` : "", s.HR ? `${Math.round(s.HR)}HR` : "", s.RBI ? `${Math.round(s.RBI)}RBI` : "", s.SB ? `${Math.round(s.SB)}SB` : ""].filter(Boolean).join(" · ")
+            : [s.ERA ? `ERA ${s.ERA.toFixed(2)}` : "", s.WHIP ? `WHIP ${s.WHIP.toFixed(2)}` : "", s.K ? `${Math.round(s.K)}K` : "", s.SV > 0 ? `${Math.round(s.SV)}SV` : ""].filter(Boolean).join(" · ");
+        const tags = (r.reasons || []).map(reason =>
+            `<span class="reason-tag ${reasonClass(reason)}">${reason}</span>`
+        ).join("");
+        const scoreColor = r.final_score > 3 ? "#4ade80" : r.final_score > 0 ? "#fbbf24" : "#f87171";
+        return `<div class="rec-card" style="display:flex;gap:10px;align-items:flex-start">
+            <span class="rec-rank">${i+1}</span>
+            <div style="flex:1;min-width:0">
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                    <span class="rec-name">${r.name}</span>
+                    <span class="badge badge-purple" style="font-size:0.65rem">${r.position}</span>
+                    <span style="color:#555;font-size:0.75rem">${r.team}</span>
+                    <span style="margin-left:auto;color:${scoreColor};font-weight:bold;font-size:0.85rem">${r.final_score > 0 ? '+' : ''}${r.final_score.toFixed(1)}</span>
+                </div>
+                <div class="rec-stats">${statStr || (r.yahoo_rank <= 50 ? `Yahoo 排名 #${r.yahoo_rank}` : '暫無成績數據（新秀）')}</div>
+                <div style="margin-top:4px">${tags}</div>
+            </div>
+        </div>`;
+    }).join("");
+}
+
+// ── Available by position ──────────────────────────────────────
+function switchPos(pos) {
+    currentPos = pos;
+    document.querySelectorAll(".pos-tab").forEach(t => {
+        t.classList.toggle("active", t.textContent === pos);
+    });
+    renderAvailByPos();
+}
+
+function renderAvailByPos() {
+    const el = document.getElementById("posAvailTable");
+    const players = availByPos[currentPos] || [];
+    if (players.length === 0) {
+        el.innerHTML = '<div style="color:#555;text-align:center;padding:20px">無資料</div>';
+        return;
+    }
+    el.innerHTML = `<table style="width:100%">
+        <thead><tr>
+            <th style="text-align:left;padding:6px;color:#888;font-weight:normal;font-size:0.8rem">#</th>
+            <th style="text-align:left;padding:6px;color:#888;font-weight:normal;font-size:0.8rem">球員</th>
+            <th style="text-align:left;padding:6px;color:#888;font-weight:normal;font-size:0.8rem">球隊</th>
+            <th style="text-align:right;padding:6px;color:#888;font-weight:normal;font-size:0.8rem">ADP輪次</th>
+            <th style="text-align:right;padding:6px;color:#888;font-weight:normal;font-size:0.8rem">價值</th>
+        </tr></thead>
+        <tbody>
+        ${players.map((p, i) => {
+            const valColor = p.value > 2 ? "#4ade80" : p.value > 0 ? "#fbbf24" : "#888";
+            return `<tr>
+                <td style="padding:5px 6px;color:#555">${i+1}</td>
+                <td style="padding:5px 6px;font-weight:bold">${p.name}</td>
+                <td style="padding:5px 6px;color:#888">${p.team}</td>
+                <td style="padding:5px 6px;text-align:right;color:#888">第${p.adp_round}輪</td>
+                <td style="padding:5px 6px;text-align:right;color:${valColor};font-weight:bold">${p.value > 0 ? '+' : ''}${p.value}</td>
+            </tr>`;
+        }).join("")}
+        </tbody>
+    </table>`;
+}
+
+// ── Main poll ──────────────────────────────────────────────────
+async function refreshDraft() {
+    try {
+        const resp = await fetch(`/api/draft/${LEAGUE_KEY}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+
+        // Status bar
+        const statusBadge = document.getElementById("draftStatusBadge");
+        const draftInfo   = document.getElementById("draftInfo");
+        if (data.draft_status === "predraft") {
+            statusBadge.textContent = "選秀前";
+            statusBadge.className = "badge badge-yellow";
+            draftInfo.textContent = "選秀尚未開始 — 以下為推薦選秀順序";
+        } else {
+            statusBadge.textContent = "選秀進行中";
+            statusBadge.className = "badge badge-green";
+            const r = data.current_round;
+            draftInfo.textContent = `第 ${r} 輪 ｜ 共 ${data.total_picks} 個 pick`;
+        }
+        document.getElementById("totalPicksBadge").textContent =
+            data.draft_board.length > 0 ? `(${data.draft_board.length} picks)` : "";
+
+        // Store cat balance for roster render
+        window._lastCatBalance = data.category_balance || {};
+
+        renderDraftBoard(data.draft_board);
+        renderMyRoster(data.my_roster, data.position_needs, data.weak_cats || []);
+        renderRecommendations(data.recommendations);
+
+        availByPos = data.available_by_pos || {};
+        renderAvailByPos();
+
+        // Hide loading overlay on first success
+        document.getElementById("loadingOverlay").style.display = "none";
+
+    } catch (e) {
+        console.error("Draft poll failed:", e);
+        document.getElementById("draftInfo").textContent = "更新失敗：" + e.message;
+    }
+}
+
+// Countdown display
+function startCountdown() {
+    countdown = 12;
+    clearInterval(pollTimer);
+    pollTimer = setInterval(() => {
+        countdown--;
+        document.getElementById("refreshCountdown").textContent = `${countdown}s 後更新`;
+        if (countdown <= 0) {
+            refreshDraft();
+            countdown = 12;
+        }
+    }, 1000);
+}
+
+// Pause when tab hidden
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+        clearInterval(pollTimer);
+    } else {
+        refreshDraft();
+        startCountdown();
+    }
+});
+
+// Initial load
+refreshDraft().then(startCountdown);
+</script>
+{% endblock %}
