@@ -127,16 +127,23 @@ def get_pitching_stats_by_name(season=2025):
 def get_hot_players(days=7, season=2026, limit=8):
     """Fetch hottest hitters and pitchers from last X days.
     Falls back to 2025 season top performers if pre-season / no data."""
+    from datetime import date, timedelta
+    end = date.today()
+    start = end - timedelta(days=days)
+    start_str = start.strftime("%m/%d/%Y")
+    end_str   = end.strftime("%m/%d/%Y")
 
     def fetch_recent(group):
         try:
             r = requests.get(f"{MLB_API}/stats", params={
-                "stats": "lastXDays",
-                "lastXDays": days,
+                "stats": "byDateRange",
+                "startDate": start_str,
+                "endDate": end_str,
                 "group": group,
                 "playerPool": "all",
                 "sportId": 1,
-                "limit": 300,
+                "season": season,
+                "limit": 500,
             }, timeout=15)
             r.raise_for_status()
             return r.json().get("stats", [{}])[0].get("splits", [])
@@ -151,7 +158,7 @@ def get_hot_players(days=7, season=2026, limit=8):
         pit_splits = _fetch_all("pitching", 2025)
         source = "2025 整季"
     else:
-        source = f"最近 {days} 天"
+        source = f"{start_str} – {end_str}"
 
     hitters = []
     for split in hit_splits:
