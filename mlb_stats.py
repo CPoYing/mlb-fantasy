@@ -124,6 +124,28 @@ def get_pitching_stats_by_name(season=2025):
     return result
 
 
+def get_hitting_stats_merged(current=2026, fallback=2025):
+    """Prefer current-season stats (≥5 games), fall back to previous season."""
+    cur  = get_hitting_stats_by_name(current)
+    prev = get_hitting_stats_by_name(fallback)
+    result = dict(prev)
+    for name, s in cur.items():
+        if (s.get("G") or 0) >= 5:
+            result[name] = s
+    return result
+
+
+def get_pitching_stats_merged(current=2026, fallback=2025):
+    """Prefer current-season stats (≥2 IP), fall back to previous season."""
+    cur  = get_pitching_stats_by_name(current)
+    prev = get_pitching_stats_by_name(fallback)
+    result = dict(prev)
+    for name, s in cur.items():
+        if (s.get("IP") or 0) >= 2:
+            result[name] = s
+    return result
+
+
 def get_hot_players(days=7, season=2026, limit=8):
     """Fetch hottest hitters and pitchers from last X days.
     Falls back to 2025 season top performers if pre-season / no data."""

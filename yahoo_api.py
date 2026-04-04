@@ -238,10 +238,10 @@ def parse_player_stats(stats_raw):
     return stats
 
 def get_league_players(league_key, position="ALL", sort="AR", start=0, count=50):
-    """Get players from Yahoo + 2025 stats from MLB Stats API (matched by name)."""
+    """Get players from Yahoo + merged 2026/2025 stats from MLB Stats API (matched by name)."""
     import mlb_stats
-    hitting = mlb_stats.get_hitting_stats_by_name(2025)
-    pitching = mlb_stats.get_pitching_stats_by_name(2025)
+    hitting = mlb_stats.get_hitting_stats_merged()
+    pitching = mlb_stats.get_pitching_stats_merged()
 
     params = {"sort": sort, "start": start, "count": count}
     if position != "ALL":
@@ -362,10 +362,10 @@ def get_all_league_teams(league_key):
         return []
 
 def get_team_roster_with_stats(team_key):
-    """Get roster with 2025 stats from MLB Stats API (matched by name)."""
+    """Get roster with merged 2026/2025 stats from MLB Stats API (matched by name)."""
     import mlb_stats
-    hitting = mlb_stats.get_hitting_stats_by_name(2025)
-    pitching = mlb_stats.get_pitching_stats_by_name(2025)
+    hitting = mlb_stats.get_hitting_stats_merged()
+    pitching = mlb_stats.get_pitching_stats_merged()
 
     data = api_get(f"/team/{team_key}/roster/players")
     try:

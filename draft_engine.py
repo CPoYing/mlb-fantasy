@@ -30,12 +30,14 @@ def compute_player_values():
     if _values_cache:
         return _values_cache
 
-    hitting  = mlb_stats.get_hitting_stats_by_name(2025)
-    pitching = mlb_stats.get_pitching_stats_by_name(2025)
-    values   = {}
+    hitting_2025  = mlb_stats.get_hitting_stats_by_name(2025)
+    pitching_2025 = mlb_stats.get_pitching_stats_by_name(2025)
+    hitting_2026  = mlb_stats.get_hitting_stats_by_name(2026)
+    pitching_2026 = mlb_stats.get_pitching_stats_by_name(2026)
+    values = {}
 
-    # ── Batting z-scores ──
-    qual_b = {n: s for n, s in hitting.items() if (s.get("G") or 0) >= MIN_GAMES}
+    # ── Batting z-scores (norms from 2025 qualified pool) ──
+    qual_b = {n: s for n, s in hitting_2025.items() if (s.get("G") or 0) >= MIN_GAMES}
     b_mean, b_std = {}, {}
     for cat in BATTING_CATS:
         vals = [s[cat] for s in qual_b.values() if s.get(cat) is not None]
@@ -43,7 +45,7 @@ def compute_player_values():
             b_mean[cat] = statistics.mean(vals)
             b_std[cat]  = _stdev(vals)
 
-    for name, stats in qual_b.items():
+    def score_batter(name, stats):
         total, cats = 0.0, {}
         for cat in BATTING_CATS:
             if cat not in b_mean or stats.get(cat) is None:
@@ -53,9 +55,17 @@ def compute_player_values():
             total += z
         values[name] = {"total": round(total, 2), "cats": cats, "stats": stats, "is_batter": True}
 
-    # ── Pitching z-scores ──
-    # Two-way players (e.g. Ohtani): only overwrite if pitching total > batting total
-    qual_p = {n: s for n, s in pitching.items() if (s.get("IP") or 0) >= MIN_IP}
+    for name, stats in qual_b.items():
+        score_batter(name, stats)
+
+    # Add 2026-only batters (rookies) scored against 2025 norms
+    for name, stats in hitting_2026.items():
+        if name in values or (stats.get("G") or 0) < 5:
+            continue
+        score_batter(name, stats)
+
+    # ── Pitching z-scores (norms from 2025 qualified pool) ──
+    qual_p = {n: s for n, s in pitching_2025.items() if (s.get("IP") or 0) >= MIN_IP}
     p_mean, p_std = {}, {}
     for cat in PITCHING_CATS:
         vals = [s[cat] for s in qual_p.values() if s.get(cat) is not None]
@@ -63,7 +73,7 @@ def compute_player_values():
             p_mean[cat] = statistics.mean(vals)
             p_std[cat]  = _stdev(vals)
 
-    for name, stats in qual_p.items():
+    def score_pitcher(name, stats):
         total, cats = 0.0, {}
         for cat in PITCHING_CATS:
             if cat not in p_mean or stats.get(cat) is None:
@@ -74,10 +84,18 @@ def compute_player_values():
             cats[cat] = round(z, 2)
             total += z
         pitch_entry = {"total": round(total, 2), "cats": cats, "stats": stats, "is_batter": False}
-        # Two-way: keep whichever role gives higher value
         existing = values.get(name)
         if existing is None or pitch_entry["total"] > existing["total"]:
             values[name] = pitch_entry
+
+    for name, stats in qual_p.items():
+        score_pitcher(name, stats)
+
+    # Add 2026-only pitchers (rookies) scored against 2025 norms
+    for name, stats in pitching_2026.items():
+        if name in values or (stats.get("IP") or 0) < 2:
+            continue
+        score_pitcher(name, stats)
 
     _values_cache = values
     return values
@@ -312,7 +330,7 @@ def get_recommendations(player_pool, draft_results, my_team_key,
 
         # Flag no-stats players
         if not val:
-            reasons.append("無 2025 成績（新秀/傷兵）")
+            reasons.append("無歷史成績（新秀/傷兵）")
 
         scored.append({
             "name":              player["name"],
