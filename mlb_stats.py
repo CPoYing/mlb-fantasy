@@ -124,25 +124,58 @@ def get_pitching_stats_by_name(season=2025):
     return result
 
 
+def get_player_positions(season=2026):
+    """Return {norm_name: mlb_abbr} for all players in the given season (no game filter)."""
+    positions = {}
+    for group in ["hitting", "pitching"]:
+        try:
+            splits = _fetch_all(group, season)
+            for split in splits:
+                name = split.get("player", {}).get("fullName", "")
+                pos  = split.get("position", {}).get("abbreviation", "")
+                if name and pos:
+                    n = _normalize(name)
+                    if n not in positions:
+                        positions[n] = pos
+        except Exception:
+            pass
+    return positions
+
+
+def _apply_positions(stats_dict, positions):
+    """Overwrite mlb_pos / fantasy_eligible in-place using a positions map."""
+    for name, s in stats_dict.items():
+        if name in positions:
+            new_pos = positions[name]
+            s["mlb_pos"] = new_pos
+            is_sp = s.get("GS", 0) > 0 and not s.get("AVG")  # rough pitcher check
+            s["fantasy_eligible"] = mlb_pos_to_fantasy(new_pos, is_sp if new_pos == "P" else None)
+    return stats_dict
+
+
 def get_hitting_stats_merged(current=2026, fallback=2025):
-    """Prefer current-season stats (≥5 games), fall back to previous season."""
+    """Prefer current-season stats (≥5 games), fall back to previous season.
+    Always uses current-season positions regardless of game count."""
     cur  = get_hitting_stats_by_name(current)
     prev = get_hitting_stats_by_name(fallback)
-    result = dict(prev)
+    result = {k: dict(v) for k, v in prev.items()}
     for name, s in cur.items():
         if (s.get("G") or 0) >= 5:
-            result[name] = s
+            result[name] = dict(s)
+    _apply_positions(result, get_player_positions(current))
     return result
 
 
 def get_pitching_stats_merged(current=2026, fallback=2025):
-    """Prefer current-season stats (≥2 IP), fall back to previous season."""
+    """Prefer current-season stats (≥2 IP), fall back to previous season.
+    Always uses current-season positions regardless of IP."""
     cur  = get_pitching_stats_by_name(current)
     prev = get_pitching_stats_by_name(fallback)
-    result = dict(prev)
+    result = {k: dict(v) for k, v in prev.items()}
     for name, s in cur.items():
         if (s.get("IP") or 0) >= 2:
-            result[name] = s
+            result[name] = dict(s)
+    _apply_positions(result, get_player_positions(current))
     return result
 
 

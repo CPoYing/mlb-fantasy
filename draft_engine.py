@@ -97,6 +97,18 @@ def compute_player_values():
             continue
         score_pitcher(name, stats)
 
+    # Overlay 2026 positions onto all stats (covers position changes)
+    positions_2026 = mlb_stats.get_player_positions(2026)
+    for name, entry in values.items():
+        if name in positions_2026:
+            new_pos = positions_2026[name]
+            s = dict(entry["stats"])
+            s["mlb_pos"] = new_pos
+            is_starter = not entry["is_batter"] and s.get("GS", 0) > 0
+            s["fantasy_eligible"] = mlb_stats.mlb_pos_to_fantasy(
+                new_pos, is_starter if new_pos == "P" else None)
+            entry["stats"] = s
+
     _values_cache = values
     return values
 
