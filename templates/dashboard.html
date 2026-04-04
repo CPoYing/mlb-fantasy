@@ -1,34 +1,118 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card">
-    <h2>我的 MLB Fantasy 聯盟</h2>
-    {% if leagues %}
-    <table>
-        <thead>
-            <tr><th>聯盟名稱</th><th>賽季</th><th>隊數</th><th>操作</th></tr>
-        </thead>
-        <tbody>
-        {% for league in leagues %}
-        <tr>
-            <td>{{ league.name }}</td>
-            <td>{{ league.season }}</td>
-            <td>{{ league.num_teams }} 隊</td>
-            <td>
-                <a href="{{ url_for('draft', league_key=league.league_key) }}" class="btn btn-primary" style="margin-right:8px">選秀助手</a>
-                <a href="{{ url_for('team', league_key=league.league_key) }}" class="btn btn-outline" style="margin-right:8px">我的隊伍</a>
-                <a href="{{ url_for('h2h_analysis', league_key=league.league_key) }}" class="btn btn-outline" style="margin-right:8px">H2H 分析</a>
-                <a href="{{ url_for('players', league_key=league.league_key) }}" class="btn btn-outline" style="margin-right:8px">球員總覽</a>
-                <a href="{{ url_for('schedule', league_key=league.league_key) }}" class="btn btn-outline" style="margin-right:8px">週賽程</a>
-                <a href="{{ url_for('free_agents', league_key=league.league_key) }}" class="btn btn-outline" style="margin-right:8px">自由球員</a>
-                <a href="{{ url_for('trades', league_key=league.league_key) }}" class="btn btn-outline" style="margin-right:8px">交易建議</a>
-                <a href="{{ url_for('rankings', league_key=league.league_key) }}" class="btn btn-outline">球員排名</a>
-            </td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <div class="empty">找不到 MLB Fantasy 聯盟。請確認你有加入 Yahoo Fantasy Baseball 聯盟。</div>
-    {% endif %}
+
+<!-- Hot Players -->
+<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+    <h2 style="color:#a855f7; font-size:1.3rem;">🔥 本週最 Hot 球員</h2>
+    <span style="color:#555; font-size:0.82rem;">資料來源：{{ hot_players.source }}</span>
 </div>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:32px;">
+
+    <!-- Top Hitters -->
+    <div class="card" style="margin-bottom:0; padding:18px;">
+        <h2 style="margin-bottom:14px;">⚡ 打者</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:28px;">#</th>
+                    <th>球員</th>
+                    <th>HR</th>
+                    <th>RBI</th>
+                    <th>R</th>
+                    <th>SB</th>
+                    <th>AVG</th>
+                    <th>OPS</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for p in hot_players.hitters %}
+            <tr>
+                <td style="color:#555; font-size:0.85rem;">{{ loop.index }}</td>
+                <td>
+                    <span style="font-weight:600;">{{ p.name }}</span>
+                    <span class="badge badge-purple" style="margin-left:5px; font-size:0.68rem; padding:2px 7px;">{{ p.pos }}</span>
+                    <div style="color:#555; font-size:0.75rem; margin-top:1px;">{{ p.team }}</div>
+                </td>
+                <td style="color:#f59e0b; font-weight:700;">{{ p.HR }}</td>
+                <td>{{ p.RBI }}</td>
+                <td>{{ p.R }}</td>
+                <td style="color:#34d399;">{{ p.SB }}</td>
+                <td style="color:#a855f7; font-weight:600;">{{ p.AVG }}</td>
+                <td style="color:#888;">{{ p.OPS }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Top Pitchers -->
+    <div class="card" style="margin-bottom:0; padding:18px;">
+        <h2 style="margin-bottom:14px;">💪 投手</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:28px;">#</th>
+                    <th>球員</th>
+                    <th>W</th>
+                    <th>SV</th>
+                    <th>K</th>
+                    <th>ERA</th>
+                    <th>WHIP</th>
+                    <th>IP</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for p in hot_players.pitchers %}
+            <tr>
+                <td style="color:#555; font-size:0.85rem;">{{ loop.index }}</td>
+                <td>
+                    <span style="font-weight:600;">{{ p.name }}</span>
+                    <span class="badge badge-purple" style="margin-left:5px; font-size:0.68rem; padding:2px 7px;">{{ p.pos }}</span>
+                    <div style="color:#555; font-size:0.75rem; margin-top:1px;">{{ p.team }}</div>
+                </td>
+                <td style="color:#f59e0b; font-weight:700;">{{ p.W }}</td>
+                <td style="color:#34d399;">{{ p.SV }}</td>
+                <td>{{ p.K }}</td>
+                <td style="color:{% if p.ERA | float < 3.0 %}#34d399{% elif p.ERA | float < 4.5 %}#a855f7{% else %}#ef4444{% endif %}; font-weight:600;">{{ p.ERA }}</td>
+                <td style="color:#888;">{{ p.WHIP }}</td>
+                <td style="color:#888;">{{ p.IP }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+<!-- My Leagues -->
+<h2 style="color:#a855f7; font-size:1.3rem; margin-bottom:14px;">🏆 我的聯盟</h2>
+{% if leagues %}
+<div style="display:grid; gap:14px;">
+{% for league in leagues %}
+<div class="card" style="margin-bottom:0;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+        <div>
+            <div style="font-size:1.1rem; font-weight:700; color:#e0e0e0;">{{ league.name }}</div>
+            <div style="color:#555; font-size:0.82rem; margin-top:3px;">{{ league.season }} 賽季 &nbsp;·&nbsp; {{ league.num_teams }} 隊 &nbsp;·&nbsp; H2H</div>
+        </div>
+    </div>
+    <div style="display:flex; flex-wrap:wrap; gap:8px;">
+        <a href="{{ url_for('draft', league_key=league.league_key) }}" class="btn btn-primary">選秀助手</a>
+        <a href="{{ url_for('team', league_key=league.league_key) }}" class="btn btn-outline">我的隊伍</a>
+        <a href="{{ url_for('matchup', league_key=league.league_key) }}" class="btn btn-outline">本週對戰</a>
+        <a href="{{ url_for('h2h_analysis', league_key=league.league_key) }}" class="btn btn-outline">H2H 分析</a>
+        <a href="{{ url_for('players', league_key=league.league_key) }}" class="btn btn-outline">球員總覽</a>
+        <a href="{{ url_for('schedule', league_key=league.league_key) }}" class="btn btn-outline">週賽程</a>
+        <a href="{{ url_for('free_agents', league_key=league.league_key) }}" class="btn btn-outline">自由球員</a>
+        <a href="{{ url_for('trades', league_key=league.league_key) }}" class="btn btn-outline">交易建議</a>
+        <a href="{{ url_for('rankings', league_key=league.league_key) }}" class="btn btn-outline">球員排名</a>
+    </div>
+</div>
+{% endfor %}
+</div>
+{% else %}
+<div class="empty">找不到 MLB Fantasy 聯盟。請確認你有加入 Yahoo Fantasy Baseball 聯盟。</div>
+{% endif %}
+
 {% endblock %}

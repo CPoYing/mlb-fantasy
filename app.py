@@ -7,6 +7,7 @@ import yahoo_api as api
 import email_report
 import mlb_schedule
 import draft_engine
+import mlb_stats
 
 load_dotenv()
 
@@ -71,7 +72,8 @@ def dashboard():
         return redirect(url_for("login"))
     try:
         leagues = api.get_user_leagues()
-        return render_template("dashboard.html", leagues=leagues)
+        hot_players = mlb_stats.get_hot_players(days=7)
+        return render_template("dashboard.html", leagues=leagues, hot_players=hot_players)
     except Exception as e:
         return render_template("error.html", error=str(e))
 

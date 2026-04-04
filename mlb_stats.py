@@ -124,6 +124,92 @@ def get_pitching_stats_by_name(season=2025):
     return result
 
 
+def get_hot_players(days=7, season=2026, limit=8):
+    """Fetch hottest hitters and pitchers from last X days.
+    Falls back to 2025 season top performers if pre-season / no data."""
+
+    def fetch_recent(group):
+        try:
+            r = requests.get(f"{MLB_API}/stats", params={
+                "stats": "lastXDays",
+                "lastXDays": days,
+                "group": group,
+                "playerPool": "all",
+                "sportId": 1,
+                "season": season,
+                "limit": 300,
+            }, timeout=15)
+            r.raise_for_status()
+            return r.json().get("stats", [{}])[0].get("splits", [])
+        except Exception:
+            return []
+
+    hit_splits = fetch_recent("hitting")
+    pit_splits = fetch_recent("pitching")
+
+    if not hit_splits and not pit_splits:
+        hit_splits = _fetch_all("hitting", 2025)
+        pit_splits = _fetch_all("pitching", 2025)
+        source = "2025 整季"
+    else:
+        source = f"最近 {days} 天"
+
+    hitters = []
+    for split in hit_splits:
+        s = split.get("stat", {})
+        name = split.get("player", {}).get("fullName", "")
+        pos = split.get("position", {}).get("abbreviation", "")
+        team = split.get("team", {}).get("name", "")
+        hr  = _f(s.get("homeRuns")) or 0
+        rbi = _f(s.get("rbi")) or 0
+        r   = _f(s.get("runs")) or 0
+        sb  = _f(s.get("stolenBases")) or 0
+        avg = _f(s.get("avg")) or 0
+        ops = _f(s.get("ops")) or 0
+        g   = _f(s.get("gamesPlayed")) or 0
+        if g < 2:
+            continue
+        score = hr * 4 + rbi * 1.5 + r + sb * 2 + avg * 50
+        hitters.append({
+            "name": name, "pos": pos, "team": team,
+            "HR": int(hr), "RBI": int(rbi), "R": int(r), "SB": int(sb),
+            "AVG": f"{avg:.3f}", "OPS": f"{ops:.3f}",
+            "G": int(g), "score": score,
+        })
+    hitters.sort(key=lambda x: x["score"], reverse=True)
+
+    pitchers = []
+    for split in pit_splits:
+        s = split.get("stat", {})
+        name = split.get("player", {}).get("fullName", "")
+        team = split.get("team", {}).get("name", "")
+        w    = _f(s.get("wins")) or 0
+        sv   = _f(s.get("saves")) or 0
+        k    = _f(s.get("strikeOuts")) or 0
+        era  = _f(s.get("era")) or 99
+        whip = _f(s.get("whip")) or 99
+        ip   = _f(s.get("inningsPitched")) or 0
+        g    = int(_f(s.get("gamesPlayed")) or 0)
+        gs   = int(_f(s.get("gamesStarted")) or 0)
+        if ip < 1:
+            continue
+        role = "SP" if g > 0 and (gs / g) >= 0.5 else "RP"
+        score = w * 5 + sv * 5 + k * 0.5 - era * 2 - whip * 3
+        pitchers.append({
+            "name": name, "pos": role, "team": team,
+            "W": int(w), "SV": int(sv), "K": int(k),
+            "ERA": f"{era:.2f}", "WHIP": f"{whip:.2f}", "IP": f"{ip:.1f}",
+            "G": g, "score": score,
+        })
+    pitchers.sort(key=lambda x: x["score"], reverse=True)
+
+    return {
+        "hitters": hitters[:limit],
+        "pitchers": pitchers[:limit],
+        "source": source,
+    }
+
+
 def _f(val):
     if val is None:
         return None
