@@ -136,7 +136,6 @@ def get_hot_players(days=7, season=2026, limit=8):
                 "group": group,
                 "playerPool": "all",
                 "sportId": 1,
-                "season": season,
                 "limit": 300,
             }, timeout=15)
             r.raise_for_status()
