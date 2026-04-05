@@ -83,6 +83,96 @@
 
 </div>
 
+<!-- My Team -->
+{% if my_team_display %}
+{% set mtd = my_team_display %}
+<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+    <h2 style="color:#a855f7; font-size:1.3rem;">⚾ 我的隊伍：{{ mtd.team.name }}</h2>
+    <a href="{{ url_for('team', league_key=mtd.league_key) }}" class="btn btn-outline" style="font-size:0.82rem;">完整頁面</a>
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:32px;">
+
+    <!-- Batters -->
+    <div class="card" style="margin-bottom:0; padding:18px;">
+        <h2 style="margin-bottom:14px;">⚡ 打者</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>球員</th>
+                    <th title="Runs">R</th>
+                    <th title="Home Runs">HR</th>
+                    <th title="RBI">RBI</th>
+                    <th title="Stolen Bases">SB</th>
+                    <th title="Batting Average">AVG</th>
+                    <th title="總評分">評分</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for p in mtd.batters %}
+            <tr>
+                <td>
+                    <span style="font-weight:600;">{{ p.name }}</span>
+                    <span class="badge badge-purple" style="margin-left:5px;font-size:0.65rem;">{{ p.position }}</span>
+                    <div style="color:#555;font-size:0.72rem;">{{ p.team }}</div>
+                </td>
+                {% for cat in ['R','HR','RBI','SB','AVG'] %}
+                {% set z = p.cats.get(cat) %}
+                <td style="color:{% if z is not none and z >= 0.5 %}#34d399{% elif z is not none and z <= -0.5 %}#ef4444{% else %}#888{% endif %}; font-size:0.85rem;">
+                    {% if z is not none %}{{ '%+.1f'|format(z) }}{% else %}—{% endif %}
+                </td>
+                {% endfor %}
+                <td style="font-weight:700; color:{% if p.total is not none and p.total >= 1 %}#34d399{% elif p.total is not none and p.total <= -1 %}#ef4444{% else %}#a855f7{% endif %};">
+                    {% if p.total is not none %}{{ '%+.1f'|format(p.total) }}{% else %}—{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pitchers -->
+    <div class="card" style="margin-bottom:0; padding:18px;">
+        <h2 style="margin-bottom:14px;">💪 投手</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>球員</th>
+                    <th title="Wins">W</th>
+                    <th title="Saves">SV</th>
+                    <th title="Strikeouts">K</th>
+                    <th title="ERA">ERA</th>
+                    <th title="WHIP">WHIP</th>
+                    <th title="總評分">評分</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for p in mtd.pitchers %}
+            <tr>
+                <td>
+                    <span style="font-weight:600;">{{ p.name }}</span>
+                    <span class="badge badge-purple" style="margin-left:5px;font-size:0.65rem;">{{ p.position }}</span>
+                    <div style="color:#555;font-size:0.72rem;">{{ p.team }}</div>
+                </td>
+                {% for cat in ['W','SV','K','ERA','WHIP'] %}
+                {% set z = p.cats.get(cat) %}
+                <td style="color:{% if z is not none and z >= 0.5 %}#34d399{% elif z is not none and z <= -0.5 %}#ef4444{% else %}#888{% endif %}; font-size:0.85rem;">
+                    {% if z is not none %}{{ '%+.1f'|format(z) }}{% else %}—{% endif %}
+                </td>
+                {% endfor %}
+                <td style="font-weight:700; color:{% if p.total is not none and p.total >= 1 %}#34d399{% elif p.total is not none and p.total <= -1 %}#ef4444{% else %}#a855f7{% endif %};">
+                    {% if p.total is not none %}{{ '%+.1f'|format(p.total) }}{% else %}—{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        <div style="color:#555;font-size:0.75rem;margin-top:8px;">評分為 z-score：正數 = 聯盟水準以上，負數 = 以下</div>
+    </div>
+
+</div>
+{% endif %}
+
 <!-- My Leagues -->
 <h2 style="color:#a855f7; font-size:1.3rem; margin-bottom:14px;">🏆 我的聯盟</h2>
 {% if leagues %}

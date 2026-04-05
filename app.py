@@ -71,10 +71,55 @@ def dashboard():
     if "access_token" not in session:
         return redirect(url_for("login"))
     try:
-        leagues = api.get_user_leagues()
+        leagues     = api.get_user_leagues()
         hot_players = mlb_stats.get_hot_players(days=7)
-        return render_template("dashboard.html", leagues=leagues, hot_players=hot_players)
+
+        # Build my team data with z-scores for the first league found
+        my_team_display = None
+        if leagues:
+            league_key = leagues[0]["league_key"]
+            my_team = api.get_my_team(league_key)
+            if my_team:
+                roster  = api.get_team_roster_with_stats(my_team["team_key"])
+                values  = draft_engine.compute_player_values()
+                norm    = mlb_stats._normalize
+                BATTING_CATS  = ["R", "HR", "RBI", "SB", "AVG"]
+                PITCHING_CATS = ["W", "SV", "K", "ERA", "WHIP"]
+
+                batters, pitchers = [], []
+                for p in roster:
+                    nk  = norm(p["name"])
+                    val = values.get(nk, {})
+                    cats = val.get("cats", {})
+                    total = val.get("total", None)
+                    row = {
+                        "name":     p["name"],
+                        "position": p["position"],
+                        "team":     p["team"],
+                        "total":    round(total, 2) if total is not None else None,
+                        "cats":     cats,
+                    }
+                    if p["is_batter"]:
+                        row["stat_keys"] = BATTING_CATS
+                        batters.append(row)
+                    else:
+                        row["stat_keys"] = PITCHING_CATS
+                        pitchers.append(row)
+
+                batters.sort(key=lambda x: x["total"] or -99, reverse=True)
+                pitchers.sort(key=lambda x: x["total"] or -99, reverse=True)
+                my_team_display = {
+                    "team":     my_team,
+                    "batters":  batters,
+                    "pitchers": pitchers,
+                    "league_key": league_key,
+                }
+
+        return render_template("dashboard.html", leagues=leagues,
+                               hot_players=hot_players,
+                               my_team_display=my_team_display)
     except Exception as e:
+        import traceback; traceback.print_exc()
         return render_template("error.html", error=str(e))
 
 @app.route("/team/<league_key>")
