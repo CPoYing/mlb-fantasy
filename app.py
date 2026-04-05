@@ -345,6 +345,74 @@ def players(league_key):
         import traceback; traceback.print_exc()
         return render_template("error.html", error=str(e))
 
+@app.route("/league-overview/<league_key>")
+def league_overview(league_key):
+    if "access_token" not in session:
+        return redirect(url_for("login"))
+    try:
+        teams = api.get_all_league_teams(league_key)
+        CATS = ["R", "HR", "RBI", "SB", "AVG", "W", "SV", "K", "ERA", "WHIP"]
+        LOWER_BETTER = {"ERA", "WHIP"}
+
+        team_data = []
+        for team in teams:
+            roster = api.get_team_roster_with_stats(team["team_key"])
+            r = hr = rbi = sb = w = sv = k = 0
+            avg_vals = []
+            era_num = whip_num = ip_total = 0.0
+
+            for p in roster:
+                s = p.get("stats", {})
+                if p.get("is_batter"):
+                    r   += s.get("R",   0) or 0
+                    hr  += s.get("HR",  0) or 0
+                    rbi += s.get("RBI", 0) or 0
+                    sb  += s.get("SB",  0) or 0
+                    if s.get("AVG") is not None:
+                        avg_vals.append(s["AVG"])
+                else:
+                    w  += s.get("W",  0) or 0
+                    sv += s.get("SV", 0) or 0
+                    k  += s.get("K",  0) or 0
+                    ip   = float(s.get("IP",   0) or 0)
+                    era  = s.get("ERA")
+                    whip = s.get("WHIP")
+                    if ip > 0:
+                        ip_total += ip
+                        if era  is not None: era_num  += era  * ip
+                        if whip is not None: whip_num += whip * ip
+
+            team_data.append({
+                "name":     team["name"],
+                "team_key": team["team_key"],
+                "is_mine":  team["is_mine"],
+                "players":  len(roster),
+                "R":    int(r), "HR": int(hr), "RBI": int(rbi), "SB": int(sb),
+                "AVG":  round(sum(avg_vals) / len(avg_vals), 3) if avg_vals else 0.0,
+                "W":    int(w), "SV": int(sv), "K": int(k),
+                "ERA":  round(era_num  / ip_total, 2) if ip_total > 0 else 0.0,
+                "WHIP": round(whip_num / ip_total, 2) if ip_total > 0 else 0.0,
+            })
+
+        # Rank each team per category
+        for cat in CATS:
+            ranked = sorted(team_data, key=lambda t: t[cat], reverse=(cat not in LOWER_BETTER))
+            for rank, t in enumerate(ranked, 1):
+                t[f"{cat}_rank"] = rank
+
+        # Total score = sum of ranks (lower = better overall)
+        for t in team_data:
+            t["score"] = sum(t[f"{cat}_rank"] for cat in CATS)
+        team_data.sort(key=lambda t: t["score"])
+        for i, t in enumerate(team_data, 1):
+            t["overall"] = i
+
+        return render_template("league_overview.html", teams=team_data,
+                               league_key=league_key, cats=CATS)
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return render_template("error.html", error=str(e))
+
 @app.route("/schedule/<league_key>")
 def schedule(league_key):
     if "access_token" not in session:

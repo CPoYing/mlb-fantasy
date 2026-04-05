@@ -105,6 +105,7 @@
         <a href="{{ url_for('free_agents', league_key=league.league_key) }}" class="btn btn-outline">自由球員</a>
         <a href="{{ url_for('trades', league_key=league.league_key) }}" class="btn btn-outline">交易建議</a>
         <a href="{{ url_for('rankings', league_key=league.league_key) }}" class="btn btn-outline">球員排名</a>
+        <a href="{{ url_for('league_overview', league_key=league.league_key) }}" class="btn btn-outline">聯盟分析</a>
     </div>
 </div>
 {% endfor %}
