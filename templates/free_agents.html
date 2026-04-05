@@ -9,7 +9,7 @@
 
 <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <h2>自由球員推薦</h2>
+        <h2>Waiver / 自由球員</h2>
         <form method="get">
             <select name="position" onchange="this.form.submit()">
                 <option value="B" {% if position=='B' %}selected{% endif %}>打者</option>
@@ -22,7 +22,7 @@
     {% if players %}
     <table>
         <thead>
-            <tr><th>#</th><th>球員</th><th>位置</th><th>球隊</th><th>擁有率</th></tr>
+            <tr><th>#</th><th>球員</th><th>位置</th><th>球隊</th><th>狀態</th><th>擁有率</th></tr>
         </thead>
         <tbody>
         {% for p in players %}
@@ -31,6 +31,13 @@
             <td>{{ p.name }}</td>
             <td><span class="badge badge-purple">{{ p.position }}</span></td>
             <td>{{ p.team }}</td>
+            <td>
+                {% if p.status == 'W' %}
+                <span class="badge badge-yellow">Waiver</span>
+                {% else %}
+                <span class="badge badge-green">FA</span>
+                {% endif %}
+            </td>
             <td>
                 <div style="display:flex;align-items:center;gap:8px">
                     <div style="background:#2a2a4a;border-radius:4px;height:6px;width:80px;overflow:hidden">

@@ -178,34 +178,36 @@ def get_current_matchup(team_key):
 # ── Free Agents ────────────────────────────────────────────────
 
 def get_free_agents(league_key, position="B", count=25):
-    """Get top available free agents by position."""
-    pos_map = {"B": "1B,2B,3B,SS,OF,C,1B", "SP": "SP", "RP": "RP"}
-    data = api_get(
-        f"/league/{league_key}/players",
-        params={
-            "status": "FA",
-            "sort": "AR",
-            "count": count,
-            "position": position
-        }
-    )
-    try:
-        players_data = data["fantasy_content"]["league"][1]["players"]
-        players = []
-        for i in range(players_data["count"]):
-            p = players_data[str(i)]["player"]
-            info = p[0]
-            percent = p[1].get("percent_owned", {})
-            players.append({
-                "name": info[2]["name"]["full"],
-                "position": info[1]["display_position"],
-                "team": info[6].get("editorial_team_abbr", ""),
-                "percent_owned": percent.get("value", "0")
-            })
-        return players
-    except Exception as e:
-        print(f"Error getting free agents: {e}")
-        return []
+    """Get top available waiver/FA players by position."""
+    players = []
+    for status in ["W", "FA"]:
+        params = {"status": status, "sort": "AR", "count": count}
+        if position != "ALL":
+            params["position"] = position
+        try:
+            data = api_get(f"/league/{league_key}/players", params=params)
+            players_data = data["fantasy_content"]["league"][1]["players"]
+            for i in range(players_data.get("count", 0)):
+                p = players_data[str(i)]["player"]
+                info = parse_player_info(p[0])
+                percent = p[1].get("percent_owned", {}) if len(p) > 1 else {}
+                players.append({
+                    "name":          info.get("name", {}).get("full", ""),
+                    "position":      info.get("display_position", ""),
+                    "team":          info.get("editorial_team_abbr", ""),
+                    "percent_owned": percent.get("value", "0") if isinstance(percent, dict) else "0",
+                    "status":        status,
+                })
+        except Exception as e:
+            print(f"Error getting {status} players: {e}")
+    # Sort by percent_owned desc, deduplicate by name
+    seen = set()
+    result = []
+    for p in sorted(players, key=lambda x: float(x["percent_owned"] or 0), reverse=True):
+        if p["name"] not in seen:
+            seen.add(p["name"])
+            result.append(p)
+    return result[:count]
 
 # ── All League Players ─────────────────────────────────────────
 
