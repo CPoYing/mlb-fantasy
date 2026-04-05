@@ -72,21 +72,21 @@ def get_my_team(league_key):
     data = api_get(f"/leagues;league_keys={league_key}/teams")
     try:
         teams = data["fantasy_content"]["leagues"]["0"]["league"][1]["teams"]
-        user_data = api_get("/users;use_login=1/games;game_codes=mlb/leagues")
-        # Find team managed by current user
         for i in range(teams["count"]):
-            team = teams[str(i)]["team"][0]
-            managers = team[19].get("managers", [{}])
-            for m in managers:
+            team_list = teams[str(i)]["team"][0]
+            managers_list = _list_find(team_list, "managers") or []
+            for m in managers_list:
                 mgr = m.get("manager", {})
                 if mgr.get("is_current_login") == "1":
+                    standings = _list_find(team_list, "team_standings") or {}
+                    outcome = standings.get("outcome_totals", {})
                     return {
-                        "team_key": team[0]["team_key"],
-                        "name": team[2]["name"],
-                        "rank": team[27].get("team_standings", {}).get("rank"),
-                        "wins": team[27].get("team_standings", {}).get("outcome_totals", {}).get("wins"),
-                        "losses": team[27].get("team_standings", {}).get("outcome_totals", {}).get("losses"),
-                        "points": team[27].get("team_standings", {}).get("points_for")
+                        "team_key": _list_find(team_list, "team_key"),
+                        "name":     _list_find(team_list, "name"),
+                        "rank":     standings.get("rank"),
+                        "wins":     outcome.get("wins"),
+                        "losses":   outcome.get("losses"),
+                        "points":   standings.get("points_for"),
                     }
     except Exception as e:
         print(f"Error getting my team: {e}")
@@ -100,14 +100,15 @@ def get_team_roster(team_key):
         players = []
         for i in range(players_data["count"]):
             p = players_data[str(i)]["player"]
-            info = p[0]
-            status = p[1].get("selected_position", [{}])
+            info = parse_player_info(p[0])
+            status = p[1].get("selected_position", [{}]) if len(p) > 1 else [{}]
+            selected = status[1].get("position", "") if len(status) > 1 else ""
             players.append({
-                "name": info[2]["name"]["full"],
-                "position": info[1]["display_position"],
-                "team": info[6].get("editorial_team_abbr", ""),
-                "selected_position": status[1].get("position", "") if len(status) > 1 else "",
-                "player_key": info[0]["player_key"]
+                "name":              info.get("name", {}).get("full", ""),
+                "position":          info.get("display_position", ""),
+                "team":              info.get("editorial_team_abbr", ""),
+                "selected_position": selected,
+                "player_key":        info.get("player_key", ""),
             })
         return players
     except Exception as e:
@@ -213,6 +214,15 @@ STAT_MAP = {
     "55": "OPS", "13": "OBP", "50": "IP", "28": "W", "32": "SV",
     "42": "K", "26": "ERA", "27": "WHIP", "48": "K9"
 }
+
+def _list_find(lst, key):
+    """Search a list of single-key dicts for a specific key. Returns value or None."""
+    if not isinstance(lst, list):
+        return None
+    for item in lst:
+        if isinstance(item, dict) and key in item:
+            return item[key]
+    return None
 
 def parse_player_info(info_list):
     """Merge the list of single-key dicts into one flat dict."""
@@ -350,11 +360,13 @@ def get_all_league_teams(league_key):
         teams = []
         for i in range(teams_data["count"]):
             t = teams_data[str(i)]["team"][0]
+            managers_list = _list_find(t, "managers") or []
+            mgr = managers_list[0].get("manager", {}) if managers_list else {}
             teams.append({
-                "team_key": t[0]["team_key"],
-                "name": t[2]["name"],
-                "manager": t[19].get("managers", [{}])[0].get("manager", {}).get("nickname", ""),
-                "is_mine": t[19].get("managers", [{}])[0].get("manager", {}).get("is_current_login") == "1"
+                "team_key": _list_find(t, "team_key"),
+                "name":     _list_find(t, "name"),
+                "manager":  mgr.get("nickname", ""),
+                "is_mine":  mgr.get("is_current_login") == "1",
             })
         return teams
     except Exception as e:
@@ -400,27 +412,31 @@ _settings_cache = {}
 _pool_cache = {}
 
 def get_league_settings(league_key):
-    """Get roster positions and league info. Cached (never changes)."""
-    if league_key in _settings_cache:
-        return _settings_cache[league_key]
+    """Get roster positions and league info.
+    Static parts (roster_positions, num_teams, pick_time) are cached.
+    draft_status is always fetched fresh."""
     data = api_get(f"/league/{league_key}/settings")
     try:
         league_info = data["fantasy_content"]["league"][0]
-        settings = data["fantasy_content"]["league"][1]["settings"][0]
-        roster_positions = {}
-        for rp in settings.get("roster_positions", []):
-            pos_data = rp.get("roster_position", {})
-            pos = pos_data.get("position", "")
-            count = int(pos_data.get("count", 0))
-            if pos:
-                roster_positions[pos] = count
-        result = {
-            "roster_positions": roster_positions,
-            "num_teams": int(league_info.get("num_teams", 14)),
-            "draft_pick_time": int(settings.get("draft_pick_time", 45)),
-            "draft_status": league_info.get("draft_status", "predraft"),
-        }
-        _settings_cache[league_key] = result
+        settings    = data["fantasy_content"]["league"][1]["settings"][0]
+        draft_status = league_info.get("draft_status", "predraft")
+
+        if league_key not in _settings_cache:
+            roster_positions = {}
+            for rp in settings.get("roster_positions", []):
+                pos_data = rp.get("roster_position", {})
+                pos   = pos_data.get("position", "")
+                count = int(pos_data.get("count", 0))
+                if pos:
+                    roster_positions[pos] = count
+            _settings_cache[league_key] = {
+                "roster_positions": roster_positions,
+                "num_teams":        int(league_info.get("num_teams", 14)),
+                "draft_pick_time":  int(settings.get("draft_pick_time", 45)),
+            }
+
+        result = dict(_settings_cache[league_key])
+        result["draft_status"] = draft_status
         return result
     except Exception as e:
         print(f"Error getting settings: {e}")
@@ -521,19 +537,20 @@ def get_all_teams_rosters(league_key):
         teams = []
         for i in range(teams_data["count"]):
             t = teams_data[str(i)]["team"]
-            team_info = t[0]
+            team_list = t[0]
             roster = t[1].get("roster", {}).get("0", {}).get("players", {})
             players = []
             for j in range(roster.get("count", 0)):
                 p = roster[str(j)]["player"]
+                info = parse_player_info(p[0])
                 players.append({
-                    "name": p[0][2]["name"]["full"],
-                    "position": p[0][1]["display_position"]
+                    "name":     info.get("name", {}).get("full", ""),
+                    "position": info.get("display_position", ""),
                 })
             teams.append({
-                "team_key": team_info[0]["team_key"],
-                "name": team_info[2]["name"],
-                "players": players
+                "team_key": _list_find(team_list, "team_key"),
+                "name":     _list_find(team_list, "name"),
+                "players":  players,
             })
         return teams
     except Exception as e:
