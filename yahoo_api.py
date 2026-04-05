@@ -288,7 +288,10 @@ def get_league_players(league_key, position="ALL", sort="AR", start=0, count=50)
         return []
 
 def analyze_player(stats, is_batter):
-    """Return strengths, weaknesses, and a role label."""
+    """Return strengths/weaknesses based on the 5x5 H2H scoring categories.
+    Batting:  R, HR, RBI, SB, AVG
+    Pitching: W, SV, K, ERA, WHIP
+    """
     strengths = []
     weaknesses = []
 
@@ -297,7 +300,6 @@ def analyze_player(stats, is_batter):
         hr  = stats.get("HR")
         rbi = stats.get("RBI")
         sb  = stats.get("SB")
-        ops = stats.get("OPS")
         r   = stats.get("R")
 
         if avg is not None:
@@ -313,15 +315,12 @@ def analyze_player(stats, is_batter):
             elif rbi < 45: weaknesses.append("打點貢獻低")
 
         if sb is not None:
-            if sb >= 20: strengths.append("高盜壘威脅")
+            if sb >= 20: strengths.append("盜壘威脅")
             elif sb < 5: weaknesses.append("缺乏速度")
-
-        if ops is not None:
-            if ops >= 0.880: strengths.append("攻擊性極強")
-            elif ops < 0.700: weaknesses.append("攻擊效率差")
 
         if r is not None:
             if r >= 85: strengths.append("高得分能力")
+            elif r < 45: weaknesses.append("得分貢獻低")
 
     else:  # pitcher
         era  = stats.get("ERA")
@@ -329,7 +328,6 @@ def analyze_player(stats, is_batter):
         k    = stats.get("K")
         w    = stats.get("W")
         sv   = stats.get("SV")
-        ip   = stats.get("IP")
 
         if sv is not None and sv >= 15:
             strengths.append("守護神")
@@ -348,9 +346,7 @@ def analyze_player(stats, is_batter):
 
         if w is not None:
             if w >= 14: strengths.append("高勝投數")
-
-        if ip is not None and ip >= 170:
-            strengths.append("大量局數")
+            elif w < 6: weaknesses.append("勝投偏少")
 
     return {"strengths": strengths, "weaknesses": weaknesses}
 

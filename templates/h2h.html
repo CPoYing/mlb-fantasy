@@ -51,8 +51,8 @@
                         {% if p.stats.get('AVG') is not none %}AVG {{ "%.3f"|format(p.stats.AVG) }}{% endif %}
                         {% if p.stats.get('HR') is not none %} · {{ p.stats.HR|int }}HR{% endif %}
                         {% if p.stats.get('RBI') is not none %} · {{ p.stats.RBI|int }}RBI{% endif %}
+                        {% if p.stats.get('R') is not none %} · {{ p.stats.R|int }}R{% endif %}
                         {% if p.stats.get('SB') is not none %} · {{ p.stats.SB|int }}SB{% endif %}
-                        {% if p.stats.get('OPS') is not none %} · OPS {{ "%.3f"|format(p.stats.OPS) }}{% endif %}
                     </div>
                     <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">
                         {% for s in p.analysis.strengths %}
@@ -124,8 +124,8 @@
                         {% if p.stats.get('AVG') is not none %}AVG {{ "%.3f"|format(p.stats.AVG) }}{% endif %}
                         {% if p.stats.get('HR') is not none %} · {{ p.stats.HR|int }}HR{% endif %}
                         {% if p.stats.get('RBI') is not none %} · {{ p.stats.RBI|int }}RBI{% endif %}
+                        {% if p.stats.get('R') is not none %} · {{ p.stats.R|int }}R{% endif %}
                         {% if p.stats.get('SB') is not none %} · {{ p.stats.SB|int }}SB{% endif %}
-                        {% if p.stats.get('OPS') is not none %} · OPS {{ "%.3f"|format(p.stats.OPS) }}{% endif %}
                     </div>
                     <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">
                         {% for s in p.analysis.strengths %}
