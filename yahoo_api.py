@@ -531,28 +531,17 @@ def get_players_by_keys(player_keys):
 
 def get_all_teams_rosters(league_key):
     """Get all teams and their rosters for trade analysis."""
-    data = api_get(f"/league/{league_key}/teams/roster/stats")
-    try:
-        teams_data = data["fantasy_content"]["league"][1]["teams"]
-        teams = []
-        for i in range(teams_data["count"]):
-            t = teams_data[str(i)]["team"]
-            team_list = t[0]
-            roster = t[1].get("roster", {}).get("0", {}).get("players", {})
-            players = []
-            for j in range(roster.get("count", 0)):
-                p = roster[str(j)]["player"]
-                info = parse_player_info(p[0])
-                players.append({
-                    "name":     info.get("name", {}).get("full", ""),
-                    "position": info.get("display_position", ""),
-                })
-            teams.append({
-                "team_key": _list_find(team_list, "team_key"),
-                "name":     _list_find(team_list, "name"),
-                "players":  players,
-            })
-        return teams
-    except Exception as e:
-        print(f"Error getting all rosters: {e}")
-        return []
+    teams = get_all_league_teams(league_key)
+    result = []
+    for team in teams:
+        try:
+            roster = get_team_roster(team["team_key"])
+        except Exception as e:
+            print(f"Error getting roster for {team['name']}: {e}")
+            roster = []
+        result.append({
+            "team_key": team["team_key"],
+            "name":     team["name"],
+            "players":  roster,
+        })
+    return result
