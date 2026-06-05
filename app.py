@@ -190,6 +190,10 @@ def matchup(league_key):
 
         # All weeks for the season (one Yahoo call), pick which to show.
         all_matchups = api.get_team_all_matchups(my_team["team_key"])
+        # Normalize week to str so template/view comparisons don't bite us
+        # when Yahoo returns int vs string inconsistently.
+        for m in all_matchups:
+            m["week"] = str(m.get("week", "")) if m.get("week") is not None else ""
         current      = next((m for m in all_matchups if m["is_current_week"]), None)
         if not current:
             current = (next((m for m in all_matchups if m["status"] == "midevent"), None)
@@ -300,6 +304,10 @@ def waiver(league_key):
         # MLB merged stats by name (covers FAs that aren't qualified for values)
         hitting  = mlb_stats.get_hitting_stats_merged()
         pitching = mlb_stats.get_pitching_stats_merged()
+        # 2026 only — for the small-sample warning (we want current-season
+        # sample size, not the 2025-padded merged version).
+        hit_2026 = mlb_stats.get_hitting_stats_by_name(2026)
+        pit_2026 = mlb_stats.get_pitching_stats_by_name(2026)
 
         enriched = []
         for fa in fa_pool:
@@ -314,6 +322,15 @@ def waiver(league_key):
             cats        = v.get("cats", {})
             analysis    = api.analyze_player(stats, is_batter)
             eligible    = stats.get("fantasy_eligible") or player_values.default_eligible(is_batter, fa["position"])
+
+            # Small-sample warning (current season only): hitter PA < 50 or pitcher IP < 10.
+            cur_2026 = hit_2026.get(nk, {}) if is_batter else pit_2026.get(nk, {})
+            if is_batter:
+                cur_volume   = cur_2026.get("PA") or 0
+                small_sample = cur_volume < 50
+            else:
+                cur_volume   = cur_2026.get("IP") or 0
+                small_sample = cur_volume < 10
 
             # Marginal upgrade — compare within the right pool only:
             # batter FAs vs my worst batter at each eligible position;
@@ -357,6 +374,8 @@ def waiver(league_key):
                 "upgrade":       upgrade,
                 "upgrade_over":  upgrade_over,
                 "is_hot":        nk in hot_names,
+                "small_sample":  small_sample,
+                "cur_volume":    cur_volume,
             })
 
         # Sort: best marginal upgrade first; fall back to z_total; fall back to percent_owned
