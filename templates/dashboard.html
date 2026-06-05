@@ -48,8 +48,25 @@
             <tr><td colspan="9" class="empty" style="padding:24px">尚未選秀</td></tr>
             {% endif %}
             </tbody>
+            {% if mtd.batters %}
+            <tfoot>
+                <tr style="background:var(--ink);color:var(--paper);font-family:var(--font-display);letter-spacing:0.05em">
+                    <td style="padding:8px 10px;text-transform:uppercase;font-size:0.78rem">隊伍合計</td>
+                    {% for cat in ['HR','RBI','SB','AVG','OBP','OPS','E'] %}
+                    {% set z = mtd.batter_totals.get(cat) %}
+                    <td class="num" style="padding:8px 10px;color:{% if z is not none and z >= 0 %}var(--green-soft){% else %}var(--red-dim){% endif %};font-weight:700">
+                        {% if z is not none %}{{ '%+.1f'|format(z) }}{% else %}—{% endif %}
+                    </td>
+                    {% endfor %}
+                    <td class="num" style="padding:8px 10px;font-weight:700;color:{% if mtd.batter_team_z >= 0 %}var(--gold){% else %}var(--red-dim){% endif %}">
+                        {{ '%+.1f'|format(mtd.batter_team_z) }}
+                    </td>
+                </tr>
+            </tfoot>
+            {% endif %}
         </table>
         </div>
+        <div class="hint" style="margin-top:6px">合計列：每項 z 加總 = 該項相對聯盟強弱；正越大越強</div>
     </div>
 
     {# Pitchers #}
@@ -87,9 +104,25 @@
             <tr><td colspan="9" class="empty" style="padding:24px">尚未選秀</td></tr>
             {% endif %}
             </tbody>
+            {% if mtd.pitchers %}
+            <tfoot>
+                <tr style="background:var(--ink);color:var(--paper);font-family:var(--font-display);letter-spacing:0.05em">
+                    <td style="padding:8px 10px;text-transform:uppercase;font-size:0.78rem">隊伍合計</td>
+                    {% for cat in ['W','BB','HLD','SV','K','ERA','WHIP'] %}
+                    {% set z = mtd.pitcher_totals.get(cat) %}
+                    <td class="num" style="padding:8px 10px;color:{% if z is not none and z >= 0 %}var(--green-soft){% else %}var(--red-dim){% endif %};font-weight:700">
+                        {% if z is not none %}{{ '%+.1f'|format(z) }}{% else %}—{% endif %}
+                    </td>
+                    {% endfor %}
+                    <td class="num" style="padding:8px 10px;font-weight:700;color:{% if mtd.pitcher_team_z >= 0 %}var(--gold){% else %}var(--red-dim){% endif %}">
+                        {{ '%+.1f'|format(mtd.pitcher_team_z) }}
+                    </td>
+                </tr>
+            </tfoot>
+            {% endif %}
         </table>
         </div>
-        <div class="hint" style="margin-top:8px">分數為 7×7 z-score 加總（2026 × 0.80 + 2025 × 0.20 加權）</div>
+        <div class="hint" style="margin-top:8px">SP 不計 HLD/SV、RP 不計 W（在合計列會自動顯示 0），分數為 7×7 z-score 加總（2026×0.80 + 2025×0.20 加權）</div>
     </div>
 </div>
 {% endif %}
