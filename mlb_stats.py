@@ -77,19 +77,24 @@ def _normalize(name):
 
 # MLB position abbreviation → fantasy-eligible positions
 _POS_MAP = {
-    "C":  ["C",  "Util"],
-    "1B": ["1B", "Util"],
-    "2B": ["2B", "Util"],
-    "3B": ["3B", "Util"],
-    "SS": ["SS", "Util"],
-    "LF": ["OF", "Util"],
-    "CF": ["OF", "Util"],
-    "RF": ["OF", "Util"],
-    "OF": ["OF", "Util"],
-    "DH": ["Util"],
-    "SP": ["SP", "P"],
-    "RP": ["RP", "P"],
-    "P":  ["P"],
+    "C":   ["C",  "Util"],
+    "1B":  ["1B", "Util"],
+    "2B":  ["2B", "Util"],
+    "3B":  ["3B", "Util"],
+    "SS":  ["SS", "Util"],
+    "LF":  ["OF", "Util"],
+    "CF":  ["OF", "Util"],
+    "RF":  ["OF", "Util"],
+    "OF":  ["OF", "Util"],
+    "DH":  ["Util"],
+    # Two-way player (Ohtani-style). For the batter-side entry MLB Stats
+    # tags him "TWP"; the value dict only knows about his hitting role
+    # there, so Util is the right cell. His pitching record gets a
+    # separate entry classified as SP/RP via _pitcher_row.
+    "TWP": ["Util"],
+    "SP":  ["SP", "P"],
+    "RP":  ["RP", "P"],
+    "P":   ["P"],
 }
 
 def mlb_pos_to_fantasy(mlb_abbr, is_starter=None):

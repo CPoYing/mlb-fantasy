@@ -77,7 +77,8 @@ RP_NORM_THRESHOLDS = {
 
 # ── Role classification ──
 
-SP_IP_THRESHOLD = 35      # has any starts + max-season IP > 35 → SP
+SP_IP_THRESHOLD     = 35  # dual-eligible (≥5 starts) + max-season IP > 35 → SP
+SP_MIN_STARTS      = 5    # spot starts (<5 over the two seasons) → still pure RP
 
 SEASON_PRORATE_FACTOR = 3.0
 RP_CLOSER_SV = 10
@@ -139,9 +140,13 @@ def _blend_multi(per_window):
 # ── Pitcher classification + tier ──
 
 def _classify_sp(s_2026, s_2025):
+    """Pure RP if fewer than SP_MIN_STARTS combined starts (a spot starter
+    or emergency long reliever doesn't graduate to SP just because they
+    accumulated relief innings). Otherwise an SP needs max-season IP > 35
+    so a guy with 4 spot-start games per year isn't called SP."""
     gs_now  = (s_2026.get("GS") if s_2026 else 0) or 0
     gs_prev = (s_2025.get("GS") if s_2025 else 0) or 0
-    if gs_now + gs_prev == 0:
+    if gs_now + gs_prev < SP_MIN_STARTS:
         return False
     ip_now  = (s_2026.get("IP") if s_2026 else 0) or 0
     ip_prev = (s_2025.get("IP") if s_2025 else 0) or 0
