@@ -440,10 +440,15 @@ def prospects():
         return redirect(url_for("login"))
     try:
         data = player_values.compute_prospect_rankings(top_n=100)
+        # Pull the user's first league so the nav can keep showing the
+        # league-specific links (matchup/rankings/waiver/schedule).
+        leagues    = api.get_user_leagues()
+        league_key = leagues[0]["league_key"] if leagues else None
         return render_template(
             "prospects.html",
             hitters=data["hitters"],
             pitchers=data["pitchers"],
+            league_key=league_key,
             active_page="prospects",
         )
     except Exception as e:

@@ -270,6 +270,66 @@ def get_milb_pitching(level, season=2026, min_ip=15):
     return result
 
 
+# ── Last-N-days windows (for recent-form weighting) ──
+
+def _fetch_date_range(group, days, season=2026, sport_id=1):
+    """Fetch stats over the last N days for a (group, sport_id).
+    Cached per (group, sport_id, days, end_date) so multiple page loads
+    on the same day reuse the result; the next calendar day refetches.
+    """
+    from datetime import date, timedelta
+    end       = date.today()
+    start     = end - timedelta(days=days)
+    key       = f"{group}_{sport_id}_lastN_{days}_{end.isoformat()}"
+    if key in _cache:
+        return _cache[key]
+
+    all_splits = []
+    offset     = 0
+    page_size  = 1000
+    while True:
+        r = requests.get(f"{MLB_API}/stats", params={
+            "stats":      "byDateRange",
+            "startDate":  start.strftime("%m/%d/%Y"),
+            "endDate":    end.strftime("%m/%d/%Y"),
+            "group":      group,
+            "playerPool": "all",
+            "sportId":    sport_id,
+            "season":     season,
+            "limit":      page_size,
+            "offset":     offset,
+        }, timeout=60)
+        r.raise_for_status()
+        splits = r.json().get("stats", [{}])[0].get("splits", [])
+        all_splits.extend(splits)
+        if len(splits) < page_size:
+            break
+        offset += page_size
+
+    _cache[key] = all_splits
+    return all_splits
+
+
+def get_hitting_last_n_days(days=14, season=2026, min_pa=5):
+    """Return {norm_name: stat_dict} for hitters with PA in the last N days."""
+    result = {}
+    for split in _fetch_date_range("hitting", days, season):
+        k, v = _hitter_row(split, min_g=1, min_pa=min_pa)
+        if k:
+            result[k] = v
+    return result
+
+
+def get_pitching_last_n_days(days=14, season=2026, min_ip=1):
+    """Return {norm_name: stat_dict} for pitchers with IP in the last N days."""
+    result = {}
+    for split in _fetch_date_range("pitching", days, season):
+        k, v = _pitcher_row(split, min_ip=min_ip)
+        if k:
+            result[k] = v
+    return result
+
+
 def get_player_positions(season=2026):
     """Return {norm_name: mlb_abbr} for all players in the given season (no game filter)."""
     positions = {}
