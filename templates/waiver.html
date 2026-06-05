@@ -42,6 +42,9 @@
                         {% if p.tier == 'closer' %}<span class="badge badge-gold">CLOSER</span>
                         {% elif p.tier == 'setup' %}<span class="badge badge-green">SETUP</span>
                         {% elif p.tier == 'middle' %}<span class="badge badge-ghost">MIDDLE</span>{% endif %}
+                        {% if p.small_sample %}
+                        <span class="badge badge-warn" title="2026 樣本不足，z 分可信度低{% if p.is_batter %}（PA {{ p.cur_volume|int }} < 50）{% else %}（IP {{ p.cur_volume }} < 10）{% endif %}">⚠ 小樣本</span>
+                        {% endif %}
                     </div>
                 </div>
                 <div style="text-align:right">
@@ -112,6 +115,7 @@
                     {% if p.is_hot %}<span class="badge badge-red" title="近 7 日火熱">🔥</span>{% endif %}
                     {% if p.tier == 'closer' %}<span class="badge badge-gold">CL</span>
                     {% elif p.tier == 'setup' %}<span class="badge badge-green">SU</span>{% endif %}
+                    {% if p.small_sample %}<span class="badge badge-warn" title="2026 樣本不足，z 分可信度低{% if p.is_batter %}（PA {{ p.cur_volume|int }} < 50）{% else %}（IP {{ p.cur_volume }} < 10）{% endif %}">⚠ 小樣本</span>{% endif %}
                 </div>
                 <div class="player-team">{{ p.team }}</div>
             </td>

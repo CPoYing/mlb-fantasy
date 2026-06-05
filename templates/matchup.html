@@ -101,10 +101,11 @@
             {% endif %}
         </h2>
         <form method="get" style="display:flex;align-items:center;gap:8px">
+            {% if opp_key %}<input type="hidden" name="opp_key" value="{{ opp_key }}">{% endif %}
             <label class="hint">查看週次：</label>
             <select name="week" onchange="this.form.submit()">
                 {% for m in all_matchups %}
-                <option value="{{ m.week }}" {% if m.week == selected_week %}selected{% endif %}>
+                <option value="{{ m.week }}" {% if m.week|string == selected_week|string %}selected{% endif %}>
                     第 {{ m.week }} 週
                     {% if m.week_start %} · {{ m.week_start[5:] }}–{{ m.week_end[5:] }}{% endif %}
                     {% if m.is_current_week %} · 本週
@@ -158,21 +159,22 @@
     <div style="display:flex;justify-content:space-between;margin-top:14px;gap:8px;flex-wrap:wrap">
         {% set sel_idx = namespace(value=-1) %}
         {% for m in all_matchups %}
-            {% if m.week == selected_week %}{% set sel_idx.value = loop.index0 %}{% endif %}
+            {% if m.week|string == selected_week|string %}{% set sel_idx.value = loop.index0 %}{% endif %}
         {% endfor %}
+        {% set opp_qs = ('&opp_key=' ~ opp_key) if opp_key else '' %}
         <div>
             {% if sel_idx.value > 0 %}
-            <a href="?week={{ all_matchups[sel_idx.value - 1].week }}" class="btn btn-ghost btn-sm">← 上一週</a>
+            <a href="?week={{ all_matchups[sel_idx.value - 1].week }}{{ opp_qs }}" class="btn btn-ghost btn-sm">← 上一週</a>
             {% endif %}
         </div>
         <div>
-            {% if current_week and selected_week != current_week %}
-            <a href="?week={{ current_week }}" class="btn btn-primary btn-sm">回本週</a>
+            {% if current_week and selected_week|string != current_week|string %}
+            <a href="?week={{ current_week }}{{ opp_qs }}" class="btn btn-primary btn-sm">回本週</a>
             {% endif %}
         </div>
         <div>
             {% if sel_idx.value >= 0 and sel_idx.value < all_matchups|length - 1 %}
-            <a href="?week={{ all_matchups[sel_idx.value + 1].week }}" class="btn btn-ghost btn-sm">下一週 →</a>
+            <a href="?week={{ all_matchups[sel_idx.value + 1].week }}{{ opp_qs }}" class="btn btn-ghost btn-sm">下一週 →</a>
             {% endif %}
         </div>
     </div>
@@ -186,6 +188,7 @@
     <div class="section-title-row">
         <h2 class="section-title" style="border:0;padding:0">陣容深度比較</h2>
         <form method="get" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            {% if selected_week %}<input type="hidden" name="week" value="{{ selected_week }}">{% endif %}
             <label class="hint">分析對手：</label>
             <select name="opp_key" onchange="this.form.submit()">
                 {% for t in all_teams %}
