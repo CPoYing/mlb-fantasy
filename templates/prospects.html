@@ -45,6 +45,8 @@
         <span class="badge level-AA">AA × 0.75</span>
         <span class="badge level-Ap">A+ × 0.5</span>
         <span class="badge level-A">A × 0.3</span>
+        <br>
+        <span style="color:var(--muted)">已升上 MLB 的球員不會出現在這裡（{% if league_key %}他們的 2026 MLB 數據看 <a href="{{ url_for('rankings', league_key=league_key) }}">球員排名</a> 那頁{% else %}他們的 2026 MLB 數據看「球員排名」那頁{% endif %}）。同一個球員 2026 在多個層級打過的話，只算最高那層。</span>
     </div>
 
     <div class="tab-row">
