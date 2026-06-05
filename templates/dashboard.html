@@ -21,7 +21,7 @@
             <thead>
                 <tr>
                     <th>球員</th>
-                    {% for cat in ['R','HR','RBI','SB','AVG'] %}<th class="num">{{ cat }}</th>{% endfor %}
+                    {% for cat in ['HR','RBI','SB','AVG','OBP','OPS','E'] %}<th class="num">{{ cat }}</th>{% endfor %}
                     <th class="num">總分</th>
                 </tr>
             </thead>
@@ -33,7 +33,7 @@
                     <span class="pos-chip">{{ p.position }}</span>
                     <div class="player-team">{{ p.team }}</div>
                 </td>
-                {% for cat in ['R','HR','RBI','SB','AVG'] %}
+                {% for cat in ['HR','RBI','SB','AVG','OBP','OPS','E'] %}
                 {% set z = p.cats.get(cat) %}
                 <td class="num {% if z is not none and z >= 1 %}z-pos-2{% elif z is not none and z >= 0.3 %}z-pos-1{% elif z is not none and z <= -1 %}z-neg-2{% elif z is not none and z <= -0.3 %}z-neg-1{% else %}z-neu{% endif %}">
                     {% if z is not none %}{{ '%+.1f'|format(z) }}{% else %}—{% endif %}
@@ -45,7 +45,7 @@
             </tr>
             {% endfor %}
             {% if not mtd.batters %}
-            <tr><td colspan="7" class="empty" style="padding:24px">尚未選秀</td></tr>
+            <tr><td colspan="9" class="empty" style="padding:24px">尚未選秀</td></tr>
             {% endif %}
             </tbody>
         </table>
@@ -60,7 +60,7 @@
             <thead>
                 <tr>
                     <th>球員</th>
-                    {% for cat in ['W','SV','K','ERA','WHIP'] %}<th class="num">{{ cat }}</th>{% endfor %}
+                    {% for cat in ['W','BB','HLD','SV','K','ERA','WHIP'] %}<th class="num">{{ cat }}</th>{% endfor %}
                     <th class="num">總分</th>
                 </tr>
             </thead>
@@ -72,7 +72,7 @@
                     <span class="pos-chip">{{ p.position }}</span>
                     <div class="player-team">{{ p.team }}</div>
                 </td>
-                {% for cat in ['W','SV','K','ERA','WHIP'] %}
+                {% for cat in ['W','BB','HLD','SV','K','ERA','WHIP'] %}
                 {% set z = p.cats.get(cat) %}
                 <td class="num {% if z is not none and z >= 1 %}z-pos-2{% elif z is not none and z >= 0.3 %}z-pos-1{% elif z is not none and z <= -1 %}z-neg-2{% elif z is not none and z <= -0.3 %}z-neg-1{% else %}z-neu{% endif %}">
                     {% if z is not none %}{{ '%+.1f'|format(z) }}{% else %}—{% endif %}
@@ -84,7 +84,7 @@
             </tr>
             {% endfor %}
             {% if not mtd.pitchers %}
-            <tr><td colspan="7" class="empty" style="padding:24px">尚未選秀</td></tr>
+            <tr><td colspan="9" class="empty" style="padding:24px">尚未選秀</td></tr>
             {% endif %}
             </tbody>
         </table>
@@ -106,7 +106,7 @@
         <div class="tbl-wrap">
         <table>
             <thead>
-                <tr><th>#</th><th>球員</th><th class="num">HR</th><th class="num">RBI</th><th class="num">R</th><th class="num">SB</th><th class="num">AVG</th></tr>
+                <tr><th>#</th><th>球員</th><th class="num">HR</th><th class="num">RBI</th><th class="num">SB</th><th class="num">AVG</th><th class="num">OPS</th></tr>
             </thead>
             <tbody>
             {% for p in hot_players.hitters %}
@@ -119,9 +119,9 @@
                 </td>
                 <td class="num"><span class="badge badge-gold">{{ p.HR }}</span></td>
                 <td class="num">{{ p.RBI }}</td>
-                <td class="num">{{ p.R }}</td>
                 <td class="num">{{ p.SB }}</td>
                 <td class="num">{{ p.AVG }}</td>
+                <td class="num">{{ p.OPS }}</td>
             </tr>
             {% endfor %}
             </tbody>

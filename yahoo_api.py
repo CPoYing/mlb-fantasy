@@ -275,12 +275,16 @@ def get_free_agents(league_key, position="B", count=50):
 # ── Strength / Weakness Analysis (5x5) ─────────────────────────
 
 def analyze_player(stats, is_batter):
-    """Return strengths/weaknesses based on the 5x5 H2H scoring categories."""
+    """Return strengths/weaknesses tuned for league 7x7 cats.
+    Batting:  HR, RBI, SB, AVG, OBP, OPS, E
+    Pitching: W, BB, HLD, SV, K, ERA, WHIP
+    """
     strengths, weaknesses = [], []
 
     if is_batter:
         avg = stats.get("AVG"); hr  = stats.get("HR"); rbi = stats.get("RBI")
-        sb  = stats.get("SB");  r   = stats.get("R")
+        sb  = stats.get("SB");  obp = stats.get("OBP"); ops = stats.get("OPS")
+        e   = stats.get("E")
 
         if avg is not None:
             if avg >= 0.295: strengths.append("高打擊率")
@@ -294,26 +298,38 @@ def analyze_player(stats, is_batter):
         if sb is not None:
             if sb >= 20: strengths.append("盜壘威脅")
             elif sb < 5: weaknesses.append("缺乏速度")
-        if r is not None:
-            if r >= 85: strengths.append("高得分能力")
-            elif r < 45: weaknesses.append("得分貢獻低")
+        if obp is not None:
+            if obp >= 0.370: strengths.append("高上壘率")
+            elif obp < 0.310: weaknesses.append("上壘率低")
+        if ops is not None:
+            if ops >= 0.870: strengths.append("超高 OPS")
+            elif ops < 0.700: weaknesses.append("OPS 偏低")
+        if e is not None:
+            if e <= 5:  strengths.append("守備穩定")
+            elif e >= 15: weaknesses.append("失誤偏多")
     else:
         era  = stats.get("ERA"); whip = stats.get("WHIP"); k = stats.get("K")
-        w    = stats.get("W");   sv   = stats.get("SV")
+        w    = stats.get("W");   sv   = stats.get("SV");   hld = stats.get("HLD")
+        bb9  = stats.get("BB9"); k9   = stats.get("K9")
 
-        if sv is not None and sv >= 15:
-            strengths.append("守護神")
+        if sv  is not None and sv  >= 15: strengths.append("守護神")
+        if hld is not None and hld >= 20: strengths.append("中繼戰將")
         if era is not None:
             if era <= 3.20: strengths.append("頂級防禦率")
             elif era > 4.50: weaknesses.append("防禦率偏高")
         if whip is not None:
-            if whip <= 1.10: strengths.append("控球精準")
-            elif whip > 1.40: weaknesses.append("保送/安打多")
+            if whip <= 1.10: strengths.append("WHIP 頂級")
+            elif whip > 1.40: weaknesses.append("WHIP 偏高")
         if k is not None:
             if k >= 180: strengths.append("三振機器")
             elif k < 80: weaknesses.append("三振數少")
         if w is not None:
             if w >= 14: strengths.append("高勝投數")
             elif w < 6: weaknesses.append("勝投偏少")
+        if bb9 is not None:
+            if bb9 <= 2.5: strengths.append("控球精準")
+            elif bb9 >= 4.0: weaknesses.append("保送多")
+        if k9 is not None and k9 >= 10.0:
+            strengths.append("K/9 出色")
 
     return {"strengths": strengths, "weaknesses": weaknesses}

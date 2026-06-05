@@ -73,16 +73,27 @@ def logout():
 
 # ── Helpers ────────────────────────────────────────────────────
 
-BATTING_CATS  = ["R", "HR", "RBI", "SB", "AVG"]
-PITCHING_CATS = ["W", "SV", "K", "ERA", "WHIP"]
+# League scoring categories (7x7 H2H)
+BATTING_CATS  = ["HR", "RBI", "SB", "AVG", "OBP", "OPS", "E"]
+PITCHING_CATS = ["W", "BB", "HLD", "SV", "K", "ERA", "WHIP"]
+
+# Reference stats shown beside the categories (FanGraphs / Savant flavor)
+BATTING_ADV   = ["ISO", "BB_pct", "K_pct", "BABIP", "SLG"]
+PITCHING_ADV  = ["K9", "BB9", "FIP", "K_BB_pct", "BABIP"]
 
 
 def _build_roster_view(roster, values):
-    """Attach z-score totals + cat z-scores to a roster list."""
+    """Attach z-score totals + cat z-scores to a roster list.
+    `values` is the tuple (batter_values, pitcher_values) returned by
+    player_values.compute_player_values(). Yahoo's display_position
+    (passed in as `p["is_batter"]`) is the source of truth for which dict
+    to consult, so two-way players get the correct categories."""
     norm = mlb_stats._normalize
+    bv, pv = values
     batters, pitchers = [], []
     for p in roster:
-        v   = values.get(norm(p["name"]), {})
+        src = bv if p["is_batter"] else pv
+        v   = src.get(norm(p["name"]), {})
         row = {
             "name":      p["name"],
             "position":  p["position"],
@@ -94,6 +105,7 @@ def _build_roster_view(roster, values):
             "cats":      v.get("cats", {}),
             "analysis":  p.get("analysis", {"strengths": [], "weaknesses": []}),
             "stat_keys": BATTING_CATS if p["is_batter"] else PITCHING_CATS,
+            "adv_keys":  BATTING_ADV  if p["is_batter"] else PITCHING_ADV,
         }
         (batters if p["is_batter"] else pitchers).append(row)
     batters.sort(key=lambda x: x["total"] or -99, reverse=True)
@@ -222,13 +234,14 @@ def waiver(league_key):
         my_team   = next((t for t in all_teams if t["is_mine"]), None)
         my_roster = api.get_team_roster_with_stats(my_team["team_key"]) if my_team else []
 
-        values    = player_values.compute_player_values()
+        bv, pv    = player_values.compute_player_values()
         norm      = mlb_stats._normalize
 
         # Worst z-score on my roster per fantasy position (used to compute upgrade)
         my_worst_by_pos = {}  # pos → (z_score, player_name)
         for p in my_roster:
-            v = values.get(norm(p["name"]), {})
+            src = bv if p["is_batter"] else pv
+            v = src.get(norm(p["name"]), {})
             z = v.get("total")
             if z is None:
                 continue
@@ -251,8 +264,10 @@ def waiver(league_key):
         enriched = []
         for fa in fa_pool:
             nk          = norm(fa["name"])
-            v           = values.get(nk, {})
-            is_batter   = v.get("is_batter") if v else (fa["position"] not in ("SP", "RP", "P"))
+            # Yahoo display_position is the source of truth for FA classification
+            is_batter   = fa["position"] not in ("SP", "RP", "P")
+            src         = bv if is_batter else pv
+            v           = src.get(nk, {})
             stats       = v.get("stats") or (hitting.get(nk, {}) if is_batter else pitching.get(nk, {}))
             z_total     = v.get("total")
             cats        = v.get("cats", {})
@@ -325,30 +340,39 @@ def api_rankings(league_key):
     if "access_token" not in session:
         return jsonify({"error": "not authenticated"}), 401
     try:
-        values = player_values.compute_player_values()
-        norm   = mlb_stats._normalize
+        bv, pv = player_values.compute_player_values()
 
-        rows = []
-        for name_key, val in values.items():
-            is_batter = val["is_batter"]
-            stats     = val["stats"]
-            mlb_pos   = stats.get("mlb_pos", "")
-            eligible  = stats.get("fantasy_eligible") or player_values.default_eligible(is_batter, mlb_pos)
-            primary   = mlb_pos or ("SP" if not is_batter else "OF")
-            rows.append({
+        def _row(name_key, val):
+            stats   = val["stats"]
+            mlb_pos = stats.get("mlb_pos", "")
+            eligible = stats.get("fantasy_eligible") or player_values.default_eligible(
+                val["is_batter"], mlb_pos
+            )
+            primary = mlb_pos or ("SP" if not val["is_batter"] else "OF")
+            # Filter advanced stats to display only the meaningful ones
+            adv_keys = (["ISO", "BB_pct", "K_pct", "BABIP", "SLG"]
+                        if val["is_batter"]
+                        else ["K9", "BB9", "FIP", "K_BB_pct", "BABIP"])
+            adv = {k: stats.get(k) for k in adv_keys}
+            return {
                 "name":               name_key.title(),
-                "team":               "",
-                "headshot":           "",
                 "position":           primary,
                 "eligible_positions": eligible,
                 "z_score":            round(val["total"], 2),
                 "cats":               val["cats"],
-                "is_batter":          is_batter,
-            })
+                "adv":                adv,
+                "source":             val.get("source", ""),
+                "is_batter":          val["is_batter"],
+            }
 
+        rows = [_row(n, v) for n, v in bv.items()] + [_row(n, v) for n, v in pv.items()]
         rows.sort(key=lambda x: x["z_score"], reverse=True)
-        result = [{**r, "rank": i + 1, "adp": None, "value": None} for i, r in enumerate(rows)]
-        return jsonify({"players": result})
+        result = [{**r, "rank": i + 1} for i, r in enumerate(rows)]
+        return jsonify({
+            "players":       result,
+            "batting_cats":  BATTING_CATS,
+            "pitching_cats": PITCHING_CATS,
+        })
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
