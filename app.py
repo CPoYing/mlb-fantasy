@@ -174,7 +174,12 @@ def dashboard():
 
 @app.route("/matchup/<league_key>")
 def matchup(league_key):
-    """Combined current-week matchup + H2H roster compare + recommendations."""
+    """Weekly scoreboard + H2H roster deep-dive against any chosen opponent.
+
+    Query params:
+      week     — pick a specific week (default: this week)
+      opp_key  — explicit opponent (default: opponent in the selected week)
+    """
     if "access_token" not in session:
         return redirect(url_for("login"))
     try:
@@ -183,13 +188,23 @@ def matchup(league_key):
         if not my_team:
             return render_template("error.html", error="找不到你的隊伍。")
 
-        # Current week scoreboard (Yahoo)
-        matchup_data = api.get_current_matchup(my_team["team_key"]) or {}
+        # All weeks for the season (one Yahoo call), pick which to show.
+        all_matchups = api.get_team_all_matchups(my_team["team_key"])
+        current      = next((m for m in all_matchups if m["is_current_week"]), None)
+        if not current:
+            current = (next((m for m in all_matchups if m["status"] == "midevent"), None)
+                       or next((m for m in reversed(all_matchups) if m["status"] == "postevent"), None)
+                       or (all_matchups[0] if all_matchups else None))
 
-        # Opponent selection: explicit param > this week's opponent > none
+        week_arg = request.args.get("week", "").strip()
+        selected = next((m for m in all_matchups if m["week"] == week_arg), current) if week_arg else current
+        scoreboard = selected or {}
+
+        # Opponent for H2H deep-dive — explicit param wins, otherwise
+        # use whoever I'm matched against in the selected week.
         opp_key = request.args.get("opp_key", "").strip()
-        if not opp_key and matchup_data.get("teams"):
-            for t in matchup_data["teams"]:
+        if not opp_key and scoreboard.get("teams"):
+            for t in scoreboard["teams"]:
                 if t["team_key"] != my_team["team_key"]:
                     opp_key = t["team_key"]
                     break
@@ -204,14 +219,16 @@ def matchup(league_key):
             opp_roster = api.get_team_roster_with_stats(opp_key)
             opp_bat, opp_pit = _build_roster_view(opp_roster, values)
 
-        # Per-category strength compare (z-totals)
         my_cats  = {**_roster_cat_totals(my_bat),  **_roster_cat_totals(my_pit)}
         opp_cats = {**_roster_cat_totals(opp_bat), **_roster_cat_totals(opp_pit)}
 
         return render_template(
             "matchup.html",
             league_key=league_key,
-            scoreboard=matchup_data,
+            scoreboard=scoreboard,
+            all_matchups=all_matchups,
+            current_week=current["week"] if current else None,
+            selected_week=scoreboard.get("week"),
             my_team=my_team,
             opp_team=opp_team,
             opp_key=opp_key,

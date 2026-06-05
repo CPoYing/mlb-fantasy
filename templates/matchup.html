@@ -87,11 +87,33 @@
 
 {% block content %}
 
-{# ── Scoreboard (current week) ── #}
+{# ── Scoreboard (selectable week) ── #}
 <div class="card">
     <div class="section-title-row">
-        <h2 class="section-title" style="border:0;padding:0">第 {{ scoreboard.week or '-' }} 週 計分板</h2>
-        <span class="section-meta">Yahoo 即時分數</span>
+        <h2 class="section-title" style="border:0;padding:0">
+            第 {{ scoreboard.week or '-' }} 週 計分板
+            {% if scoreboard.week and scoreboard.week == current_week %}
+            <span class="badge badge-gold" style="margin-left:8px">本週</span>
+            {% elif scoreboard.status == 'postevent' %}
+            <span class="badge badge-ghost" style="margin-left:8px">已結束</span>
+            {% elif scoreboard.status == 'preevent' %}
+            <span class="badge badge-ghost" style="margin-left:8px">尚未開賽</span>
+            {% endif %}
+        </h2>
+        <form method="get" style="display:flex;align-items:center;gap:8px">
+            <label class="hint">查看週次：</label>
+            <select name="week" onchange="this.form.submit()">
+                {% for m in all_matchups %}
+                <option value="{{ m.week }}" {% if m.week == selected_week %}selected{% endif %}>
+                    第 {{ m.week }} 週
+                    {% if m.week_start %} · {{ m.week_start[5:] }}–{{ m.week_end[5:] }}{% endif %}
+                    {% if m.is_current_week %} · 本週
+                    {% elif m.is_playoffs %} · 季後賽
+                    {% elif m.status == 'postevent' %} · 已結束{% endif %}
+                </option>
+                {% endfor %}
+            </select>
+        </form>
     </div>
 
     {% if scoreboard and scoreboard.teams %}
@@ -105,27 +127,57 @@
         </div>
         <div class="vs">VS</div>
         <div class="side">
-            <div class="lbl">本週對手</div>
+            <div class="lbl">{% if scoreboard.status == 'postevent' %}對戰對手{% elif scoreboard.is_current_week %}本週對手{% else %}預定對手{% endif %}</div>
             <div class="pts">{{ opp.points if opp else '—' }}</div>
             <div class="name">{{ opp.name if opp else '—' }}</div>
         </div>
     </div>
 
     {% if me and opp %}
+    {% if scoreboard.status == 'preevent' %}
+    <div style="text-align:center;margin-top:6px">
+        <span class="badge badge-ghost">尚未開賽</span>
+    </div>
+    {% else %}
     {% set my_pts  = me.points|float %}
     {% set opp_pts = opp.points|float %}
+    {% set verb = '最終' if scoreboard.status == 'postevent' else '目前' %}
     <div style="text-align:center;margin-top:6px">
         {% if my_pts > opp_pts %}
-        <span class="badge badge-green">目前領先</span>
+        <span class="badge badge-green">{{ verb }}領先 {{ '%.1f'|format(my_pts - opp_pts) }} 分</span>
         {% elif my_pts < opp_pts %}
-        <span class="badge badge-red">目前落後</span>
+        <span class="badge badge-red">{{ verb }}落後 {{ '%.1f'|format(opp_pts - my_pts) }} 分</span>
         {% else %}
         <span class="badge badge-gold">平手</span>
         {% endif %}
     </div>
     {% endif %}
+    {% endif %}
+
+    {# Quick-jump prev/next week #}
+    <div style="display:flex;justify-content:space-between;margin-top:14px;gap:8px;flex-wrap:wrap">
+        {% set sel_idx = namespace(value=-1) %}
+        {% for m in all_matchups %}
+            {% if m.week == selected_week %}{% set sel_idx.value = loop.index0 %}{% endif %}
+        {% endfor %}
+        <div>
+            {% if sel_idx.value > 0 %}
+            <a href="?week={{ all_matchups[sel_idx.value - 1].week }}" class="btn btn-ghost btn-sm">← 上一週</a>
+            {% endif %}
+        </div>
+        <div>
+            {% if current_week and selected_week != current_week %}
+            <a href="?week={{ current_week }}" class="btn btn-primary btn-sm">回本週</a>
+            {% endif %}
+        </div>
+        <div>
+            {% if sel_idx.value >= 0 and sel_idx.value < all_matchups|length - 1 %}
+            <a href="?week={{ all_matchups[sel_idx.value + 1].week }}" class="btn btn-ghost btn-sm">下一週 →</a>
+            {% endif %}
+        </div>
+    </div>
     {% else %}
-    <div class="empty">本週尚無對戰資料</div>
+    <div class="empty">這一週還沒有對戰資料</div>
     {% endif %}
 </div>
 
