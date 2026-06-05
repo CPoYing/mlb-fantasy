@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% block title %}錯誤{% endblock %}
 {% block content %}
-<div class="card" style="text-align:center;padding:60px">
-    <div style="font-size:3rem;margin-bottom:16px">⚠️</div>
-    <h2 style="margin-bottom:12px">發生錯誤</h2>
-    <p style="color:#888;margin-bottom:24px">{{ error }}</p>
+<div class="card" style="text-align:center;padding:48px 24px">
+    <div style="font-family:var(--font-display);font-size:3rem;color:var(--red)">⚠</div>
+    <h2 style="border:0;padding:0;margin-top:8px">發生錯誤</h2>
+    <p style="color:var(--muted);margin:8px 0 24px">{{ error }}</p>
     <a href="{{ url_for('dashboard') }}" class="btn btn-primary">回到首頁</a>
 </div>
 {% endblock %}

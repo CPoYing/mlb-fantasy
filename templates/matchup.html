@@ -1,64 +1,211 @@
 {% extends "base.html" %}
+{% block title %}本週對戰{% endblock %}
+
+{% macro roster_block(batters, pitchers, side_color) %}
+    {% if batters %}
+    <div class="hint" style="margin:10px 0 6px;text-transform:uppercase;letter-spacing:0.1em">打者</div>
+    {% for p in batters %}
+    <div style="padding:8px 0;border-bottom:1px dashed var(--line)">
+        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
+            <span class="player-name">{{ p.name }}</span>
+            <span class="pos-chip">{{ p.position }}</span>
+            <span class="player-team">{{ p.team }}</span>
+            {% if p.total is not none %}
+            <span class="badge {% if p.total >= 2 %}badge-green{% elif p.total <= -2 %}badge-red{% else %}badge-ghost{% endif %}" style="margin-left:auto">z {{ '%+.1f'|format(p.total) }}</span>
+            {% endif %}
+        </div>
+        <div class="num" style="font-size:0.78rem;color:var(--muted);margin-top:4px">
+            {% if p.stats.get('AVG') is not none %}AVG {{ "%.3f"|format(p.stats.AVG) }}{% endif %}
+            {% if p.stats.get('HR') is not none %} · {{ p.stats.HR|int }}HR{% endif %}
+            {% if p.stats.get('RBI') is not none %} · {{ p.stats.RBI|int }}RBI{% endif %}
+            {% if p.stats.get('R') is not none %} · {{ p.stats.R|int }}R{% endif %}
+            {% if p.stats.get('SB') is not none %} · {{ p.stats.SB|int }}SB{% endif %}
+        </div>
+        {% if p.analysis.strengths or p.analysis.weaknesses %}
+        <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px">
+            {% for s in p.analysis.strengths %}<span class="badge badge-green">{{ s }}</span>{% endfor %}
+            {% for w in p.analysis.weaknesses %}<span class="badge badge-red">{{ w }}</span>{% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if pitchers %}
+    <div class="hint" style="margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.1em">投手</div>
+    {% for p in pitchers %}
+    <div style="padding:8px 0;border-bottom:1px dashed var(--line)">
+        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
+            <span class="player-name">{{ p.name }}</span>
+            <span class="pos-chip">{{ p.position }}</span>
+            <span class="player-team">{{ p.team }}</span>
+            {% if p.total is not none %}
+            <span class="badge {% if p.total >= 2 %}badge-green{% elif p.total <= -2 %}badge-red{% else %}badge-ghost{% endif %}" style="margin-left:auto">z {{ '%+.1f'|format(p.total) }}</span>
+            {% endif %}
+        </div>
+        <div class="num" style="font-size:0.78rem;color:var(--muted);margin-top:4px">
+            {% if p.stats.get('ERA') is not none %}ERA {{ "%.2f"|format(p.stats.ERA) }}{% endif %}
+            {% if p.stats.get('WHIP') is not none %} · WHIP {{ "%.2f"|format(p.stats.WHIP) }}{% endif %}
+            {% if p.stats.get('K') is not none %} · {{ p.stats.K|int }}K{% endif %}
+            {% if p.stats.get('W') is not none %} · {{ p.stats.W|int }}W{% endif %}
+            {% if p.stats.get('SV') is not none and p.stats.SV > 0 %} · {{ p.stats.SV|int }}SV{% endif %}
+        </div>
+        {% if p.analysis.strengths or p.analysis.weaknesses %}
+        <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px">
+            {% for s in p.analysis.strengths %}<span class="badge badge-green">{{ s }}</span>{% endfor %}
+            {% for w in p.analysis.weaknesses %}<span class="badge badge-red">{{ w }}</span>{% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if not batters and not pitchers %}
+    <div class="empty">尚未選秀或名單為空</div>
+    {% endif %}
+{% endmacro %}
+
 {% block content %}
-<div class="tab-bar">
-    <a href="{{ url_for('team', league_key=league_key) }}" class="btn btn-outline">我的隊伍</a>
-    <a href="{{ url_for('matchup', league_key=league_key) }}" class="btn btn-primary">對戰分析</a>
-    <a href="{{ url_for('free_agents', league_key=league_key) }}" class="btn btn-outline">自由球員</a>
-    <a href="{{ url_for('trades', league_key=league_key) }}" class="btn btn-outline">交易建議</a>
-</div>
 
+{# ── Scoreboard (current week) ── #}
 <div class="card">
-    <h2>第 {{ matchup.week or '-' }} 週 對戰</h2>
-    {% if matchup and matchup.teams %}
-    <div class="vs-box">
-        {% set my_team_data = matchup.teams | selectattr('team_key', 'equalto', my_team.team_key) | list %}
-        {% set opp_teams = matchup.teams | rejectattr('team_key', 'equalto', my_team.team_key) | list %}
-
-        {% for t in matchup.teams %}
-        {% if t.team_key == my_team.team_key %}
-        <div class="vs-team">
-            <div style="color:#888;font-size:0.85rem;margin-bottom:8px">我的隊伍</div>
-            <div class="name">{{ t.name }}</div>
-            <div class="pts">{{ t.points }}</div>
-            <div style="color:#888;font-size:0.8rem;margin-top:4px">分</div>
-        </div>
-        {% endif %}
-        {% endfor %}
-
-        <div class="vs-sep">VS</div>
-
-        {% for t in matchup.teams %}
-        {% if t.team_key != my_team.team_key %}
-        <div class="vs-team">
-            <div style="color:#888;font-size:0.85rem;margin-bottom:8px">對手</div>
-            <div class="name">{{ t.name }}</div>
-            <div class="pts">{{ t.points }}</div>
-            <div style="color:#888;font-size:0.8rem;margin-top:4px">分</div>
-        </div>
-        {% endif %}
-        {% endfor %}
+    <div class="section-title-row">
+        <h2 class="section-title" style="border:0;padding:0">第 {{ scoreboard.week or '-' }} 週 計分板</h2>
+        <span class="section-meta">Yahoo 即時分數</span>
     </div>
 
-    {% set my_pts = [] %}
-    {% set opp_pts = [] %}
-    {% for t in matchup.teams %}
-        {% if t.team_key == my_team.team_key %}{% set _ = my_pts.append(t.points|float) %}{% endif %}
-        {% if t.team_key != my_team.team_key %}{% set _ = opp_pts.append(t.points|float) %}{% endif %}
-    {% endfor %}
+    {% if scoreboard and scoreboard.teams %}
+    {% set me  = scoreboard.teams | selectattr('team_key', 'equalto', my_team.team_key) | list | first %}
+    {% set opp = scoreboard.teams | rejectattr('team_key', 'equalto', my_team.team_key) | list | first %}
+    <div class="scoreboard">
+        <div class="side">
+            <div class="lbl">我方</div>
+            <div class="pts">{{ me.points if me else '—' }}</div>
+            <div class="name">{{ me.name if me else my_team.name }}</div>
+        </div>
+        <div class="vs">VS</div>
+        <div class="side">
+            <div class="lbl">本週對手</div>
+            <div class="pts">{{ opp.points if opp else '—' }}</div>
+            <div class="name">{{ opp.name if opp else '—' }}</div>
+        </div>
+    </div>
 
-    {% if my_pts and opp_pts %}
-    <div style="text-align:center;margin-top:20px">
-        {% if my_pts[0] > opp_pts[0] %}
-        <span class="badge badge-green" style="font-size:1rem;padding:8px 20px">目前領先 ✓</span>
-        {% elif my_pts[0] < opp_pts[0] %}
-        <span class="badge" style="background:#dc2626;color:white;font-size:1rem;padding:8px 20px">目前落後</span>
+    {% if me and opp %}
+    {% set my_pts  = me.points|float %}
+    {% set opp_pts = opp.points|float %}
+    <div style="text-align:center;margin-top:6px">
+        {% if my_pts > opp_pts %}
+        <span class="badge badge-green">目前領先</span>
+        {% elif my_pts < opp_pts %}
+        <span class="badge badge-red">目前落後</span>
         {% else %}
-        <span class="badge badge-yellow" style="font-size:1rem;padding:8px 20px">平手</span>
+        <span class="badge badge-gold">平手</span>
         {% endif %}
     </div>
     {% endif %}
     {% else %}
-    <div class="empty">本週無對戰資料</div>
+    <div class="empty">本週尚無對戰資料</div>
     {% endif %}
 </div>
+
+{# ── Opponent picker + H2H deep dive ── #}
+<div class="card">
+    <div class="section-title-row">
+        <h2 class="section-title" style="border:0;padding:0">陣容深度比較</h2>
+        <form method="get" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <label class="hint">分析對手：</label>
+            <select name="opp_key" onchange="this.form.submit()">
+                {% for t in all_teams %}
+                {% if not t.is_mine %}
+                <option value="{{ t.team_key }}" {% if t.team_key == opp_key %}selected{% endif %}>
+                    {{ t.name }}{% if t.manager %} · {{ t.manager }}{% endif %}
+                </option>
+                {% endif %}
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+
+    {% if opp_key %}
+    {# Per-category z-total comparison #}
+    <div class="tbl-wrap" style="margin-bottom:16px">
+    <table>
+        <thead>
+            <tr>
+                <th style="text-align:right">我方 z 加總</th>
+                <th style="text-align:center">5×5 項目</th>
+                <th style="text-align:left">對方 z 加總</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for cat in batting_cats + pitching_cats %}
+        {% set mz = my_cats.get(cat, 0) %}
+        {% set oz = opp_cats.get(cat, 0) %}
+        <tr>
+            <td class="num {% if mz > oz %}z-pos-2{% else %}z-neu{% endif %}" style="text-align:right">
+                {% if mz > oz %}▶ {% endif %}{{ '%+.1f'|format(mz) }}
+            </td>
+            <td style="text-align:center"><span class="badge">{{ cat }}</span></td>
+            <td class="num {% if oz > mz %}z-pos-2{% else %}z-neu{% endif %}" style="text-align:left">
+                {{ '%+.1f'|format(oz) }}{% if oz > mz %} ◀{% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    <div class="hint" style="margin-bottom:14px">▶ ◀ 指向贏的一方；ERA / WHIP 用負 z 表示（值越大越好）</div>
+
+    {# Rosters side-by-side #}
+    <div class="grid-2">
+        <div>
+            <div class="section-title" style="border-bottom:2px solid var(--ink);font-size:1rem">我方 · {{ my_team.name }}</div>
+            {{ roster_block(my_batters, my_pitchers, 'ink') }}
+        </div>
+        <div>
+            <div class="section-title" style="border-bottom:2px solid var(--red);font-size:1rem;color:var(--red)">對方 · {{ opp_team.name if opp_team else '' }}</div>
+            {{ roster_block(opp_batters, opp_pitchers, 'red') }}
+        </div>
+    </div>
+
+    {# Aggregate strengths/weaknesses #}
+    {% set my_strengths   = [] %}
+    {% set my_weaknesses  = [] %}
+    {% set opp_strengths  = [] %}
+    {% for p in my_batters + my_pitchers %}
+        {% for s in p.analysis.strengths %}{% set _ = my_strengths.append(s) %}{% endfor %}
+        {% for w in p.analysis.weaknesses %}{% set _ = my_weaknesses.append(w) %}{% endfor %}
+    {% endfor %}
+    {% for p in opp_batters + opp_pitchers %}
+        {% for s in p.analysis.strengths %}{% set _ = opp_strengths.append(s) %}{% endfor %}
+    {% endfor %}
+
+    <div style="margin-top:18px;padding-top:14px;border-top:2px dashed var(--line)">
+        {% if my_weaknesses %}
+        <div style="margin-bottom:12px">
+            <div class="hint" style="margin-bottom:6px">我方陣容弱點：</div>
+            <div style="display:flex;flex-wrap:wrap;gap:5px">
+                {% for w in my_weaknesses | unique %}<span class="badge badge-red">{{ w }}</span>{% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        {% if opp_strengths %}
+        <div style="margin-bottom:12px">
+            <div class="hint" style="margin-bottom:6px">對方優勢：</div>
+            <div style="display:flex;flex-wrap:wrap;gap:5px">
+                {% for s in opp_strengths | unique %}<span class="badge badge-gold">{{ s }}</span>{% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+            <a href="{{ url_for('waiver', league_key=league_key) }}" class="btn btn-primary">去找 Waiver 補強</a>
+            <a href="{{ url_for('schedule', league_key=league_key) }}" class="btn btn-ghost">查本週賽程</a>
+        </div>
+    </div>
+    {% else %}
+    <div class="empty">請從上方選擇對手開始分析</div>
+    {% endif %}
+</div>
+
 {% endblock %}
