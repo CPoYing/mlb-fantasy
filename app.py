@@ -416,6 +416,24 @@ def api_rankings(league_key):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/prospects")
+def prospects():
+    """Top 100 minor-league prospects ranked by level-weighted composite z."""
+    if "access_token" not in session:
+        return redirect(url_for("login"))
+    try:
+        data = player_values.compute_prospect_rankings(top_n=100)
+        return render_template(
+            "prospects.html",
+            hitters=data["hitters"],
+            pitchers=data["pitchers"],
+            active_page="prospects",
+        )
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return render_template("error.html", error=str(e))
+
+
 @app.route("/schedule/<league_key>")
 def schedule(league_key):
     if "access_token" not in session:

@@ -7,8 +7,21 @@ import requests
 MLB_API = "https://statsapi.mlb.com/api/v1"
 _cache  = {}
 
-def _fetch_all(group, season=2025):
-    key = f"{group}_{season}"
+MILB_SPORTS = {
+    "AAA": 11,
+    "AA":  12,
+    "A+":  13,
+    "A":   14,
+}
+
+
+def _fetch_all(group, season=2025, sport_id=1):
+    """Fetch all season-stat splits for a (group, season, sport_id).
+
+    sport_id 1 = MLB; 11/12/13/14 = AAA/AA/A+/A (see MILB_SPORTS).
+    Paginated to grab every player. Cached per key for the process life.
+    """
+    key = f"{group}_{sport_id}_{season}"
     if key in _cache:
         return _cache[key]
 
@@ -22,10 +35,10 @@ def _fetch_all(group, season=2025):
             "season":     season,
             "group":      group,
             "playerPool": "all",
-            "sportId":    1,
+            "sportId":    sport_id,
             "limit":      page_size,
             "offset":     offset,
-        }, timeout=45)
+        }, timeout=60)
         r.raise_for_status()
         splits = r.json().get("stats", [{}])[0].get("splits", [])
         all_splits.extend(splits)
@@ -37,10 +50,29 @@ def _fetch_all(group, season=2025):
     return all_splits
 
 
+import re as _re
+import unicodedata as _ud
+
+_SUFFIX_RE = _re.compile(r"\s+(jr\.?|sr\.?|ii|iii|iv)\s*$", _re.IGNORECASE)
+_PUNCT_RE  = _re.compile(r"[.,'`]")
+_SPACE_RE  = _re.compile(r"\s+")
+
+
 def _normalize(name):
-    import unicodedata
-    n = unicodedata.normalize("NFD", name)
-    return "".join(c for c in n if unicodedata.category(c) != "Mn").lower().strip()
+    """Map a player display name to a comparable key.
+
+    Strips accents, lowercases, drops common suffixes (Jr./Sr./II/III/IV)
+    and punctuation (periods, commas, apostrophes), normalizes hyphens
+    to spaces, and collapses runs of whitespace. Keeps Yahoo names like
+    "José Ramírez Jr." matchable against MLB Stats' "Jose Ramirez".
+    """
+    n = _ud.normalize("NFD", name)
+    n = "".join(c for c in n if _ud.category(c) != "Mn")
+    n = n.replace("-", " ").lower()
+    n = _PUNCT_RE.sub("", n)
+    n = _SUFFIX_RE.sub("", n)
+    n = _SPACE_RE.sub(" ", n).strip()
+    return n
 
 
 # MLB position abbreviation → fantasy-eligible positions
@@ -83,127 +115,158 @@ def _div(num, den):
 PITCHER_ABBRS = {"P", "SP", "RP"}
 
 
+def _hitter_row(split, min_g, min_pa):
+    """Extract one hitter's stat dict from an MLB Stats API split,
+    or return (None, None) if filtered out.
+    Used for both MLB and MiLB extraction."""
+    name = split.get("player", {}).get("fullName", "")
+    s    = split.get("stat", {})
+    mlb_abbr = split.get("position", {}).get("abbreviation", "")
+    if mlb_abbr in PITCHER_ABBRS:
+        return None, None
+    games  = s.get("gamesPlayed", 0) or 0
+    pa_raw = s.get("plateAppearances", 0) or 0
+    if games < min_g or pa_raw < min_pa:
+        return None, None
+
+    avg = _f(s.get("avg"))
+    slg = _f(s.get("slg"))
+    obp = _f(s.get("obp"))
+    ops = _f(s.get("ops"))
+    bb  = _f(s.get("baseOnBalls"))
+    k   = _f(s.get("strikeOuts"))
+    pa  = _f(s.get("plateAppearances"))
+    babip = _f(s.get("babip"))
+
+    iso    = (slg - avg) if (slg is not None and avg is not None) else None
+    bb_pct = _div(bb, pa)
+    k_pct  = _div(k,  pa)
+
+    return _normalize(name), {
+        # League categories (7x7) — used at MLB level
+        "HR":      _f(s.get("homeRuns")),
+        "RBI":     _f(s.get("rbi")),
+        "SB":      _f(s.get("stolenBases")),
+        "AVG":     avg,
+        "OBP":     obp,
+        "OPS":     ops,
+        "E":       _f(s.get("errors")),
+        # Reference
+        "R":       _f(s.get("runs")),
+        "SLG":     slg,
+        # Advanced (Savant / FanGraphs style)
+        "ISO":     round(iso, 3) if iso is not None else None,
+        "BB_pct":  round(bb_pct, 3) if bb_pct is not None else None,
+        "K_pct":   round(k_pct,  3) if k_pct  is not None else None,
+        "BABIP":   babip,
+        # Volume
+        "PA":      pa,
+        "BB":      bb,
+        "K":       k,
+        "G":       float(games),
+        # Display
+        "name":    name,
+        "team":    split.get("team", {}).get("name", ""),
+        "mlb_pos": mlb_abbr,
+        "fantasy_eligible": mlb_pos_to_fantasy(mlb_abbr),
+    }
+
+
 def get_hitting_stats_by_name(season=2025):
     """Return {norm_name: stat_dict} for hitters with meaningful playing time.
-    Stat dict carries both 7x7 categories and advanced derived metrics
-    (ISO, BB%, K%, BABIP, SLG).
-
-    Filters defensively: MLB Stats API's hitting endpoint also returns
-    pitchers (with the pitcher's gamesPlayed = his pitching appearances
-    but 0 PA), so without a PA gate those guys leak into the batter pool
-    and end up scored against batter norms. We additionally exclude any
-    player whose primary listed position is a pitcher slot.
+    Defensively filters out pitchers (who can appear with G > 0 but PA = 0
+    in the hitting endpoint) — without this they leak into the batter pool.
     """
-    splits = _fetch_all("hitting", season)
     result = {}
-    for split in splits:
-        name  = split.get("player", {}).get("fullName", "")
-        s     = split.get("stat", {})
-        mlb_abbr = split.get("position", {}).get("abbreviation", "")
-        if mlb_abbr in PITCHER_ABBRS:
-            continue
-        games = s.get("gamesPlayed", 0) or 0
-        pa_raw = s.get("plateAppearances", 0) or 0
-        if games < 5 or pa_raw < 20:
-            continue
-
-        avg = _f(s.get("avg"))
-        slg = _f(s.get("slg"))
-        obp = _f(s.get("obp"))
-        ops = _f(s.get("ops"))
-        bb  = _f(s.get("baseOnBalls"))
-        k   = _f(s.get("strikeOuts"))
-        pa  = _f(s.get("plateAppearances"))
-        babip = _f(s.get("babip"))
-
-        iso = (slg - avg) if (slg is not None and avg is not None) else None
-        bb_pct = _div(bb, pa)
-        k_pct  = _div(k,  pa)
-
-        result[_normalize(name)] = {
-            # League categories (7x7)
-            "HR":      _f(s.get("homeRuns")),
-            "RBI":     _f(s.get("rbi")),
-            "SB":      _f(s.get("stolenBases")),
-            "AVG":     avg,
-            "OBP":     obp,
-            "OPS":     ops,
-            "E":       _f(s.get("errors")),
-            # Reference
-            "R":       _f(s.get("runs")),
-            "SLG":     slg,
-            # Advanced (Savant / FanGraphs style)
-            "ISO":     round(iso, 3) if iso is not None else None,
-            "BB_pct":  round(bb_pct, 3) if bb_pct is not None else None,
-            "K_pct":   round(k_pct,  3) if k_pct  is not None else None,
-            "BABIP":   babip,
-            # Volume
-            "PA":      pa,
-            "BB":      bb,
-            "K":       k,
-            "G":       float(games),
-            # Position
-            "mlb_pos": mlb_abbr,
-            "fantasy_eligible": mlb_pos_to_fantasy(mlb_abbr),
-        }
+    for split in _fetch_all("hitting", season):
+        k, v = _hitter_row(split, min_g=5, min_pa=20)
+        if k:
+            result[k] = v
     return result
 
 
-def get_pitching_stats_by_name(season=2025):
-    """Return {norm_name: stat_dict} for pitchers with ≥2 IP in the season.
-    Adds K/9, BB/9, K-BB%, FIP, BABIP on top of 7x7.
-    """
-    splits = _fetch_all("pitching", season)
+def get_milb_hitting(level, season=2026, min_pa=50, min_g=15):
+    """Return {norm_name: stat_dict} for hitters at a single MiLB level."""
+    sport_id = MILB_SPORTS[level]
     result = {}
-    for split in splits:
-        name = split.get("player", {}).get("fullName", "")
-        s    = split.get("stat", {})
-        ip   = _f(s.get("inningsPitched"))
-        if ip is None or ip < 2:
-            continue
-        games   = s.get("gamesPlayed", 0) or 0
-        started = s.get("gamesStarted", 0) or 0
-        is_sp   = (started / games) >= 0.5 if games > 0 else False
-        eligible = ["SP", "P"] if is_sp else ["RP", "P"]
+    for split in _fetch_all("hitting", season, sport_id=sport_id):
+        k, v = _hitter_row(split, min_g=min_g, min_pa=min_pa)
+        if k:
+            v["level"] = level
+            result[k] = v
+    return result
 
-        k    = _f(s.get("strikeOuts"))
-        bb   = _f(s.get("baseOnBalls"))
-        hr   = _f(s.get("homeRuns"))
-        bf   = _f(s.get("battersFaced"))
-        era  = _f(s.get("era"))
-        whip = _f(s.get("whip"))
-        babip = _f(s.get("babip"))
 
-        k9    = _div((k  or 0) * 9, ip)
-        bb9   = _div((bb or 0) * 9, ip)
-        k_bb  = _div((k or 0) - (bb or 0), bf) if bf else None
-        fip   = ((13 * (hr or 0) + 3 * (bb or 0) - 2 * (k or 0)) / ip + FIP_CONSTANT) if ip else None
+def _pitcher_row(split, min_ip):
+    """Extract one pitcher's stat dict from an MLB Stats API split,
+    or return (None, None) if filtered out."""
+    name = split.get("player", {}).get("fullName", "")
+    s    = split.get("stat", {})
+    ip   = _f(s.get("inningsPitched"))
+    if ip is None or ip < min_ip:
+        return None, None
+    games   = s.get("gamesPlayed", 0) or 0
+    started = s.get("gamesStarted", 0) or 0
+    is_sp   = (started / games) >= 0.5 if games > 0 else False
+    eligible = ["SP", "P"] if is_sp else ["RP", "P"]
 
-        result[_normalize(name)] = {
-            # League categories (7x7)
-            "W":        _f(s.get("wins")),
-            "BB":       bb,
-            "HLD":      _f(s.get("holds")),
-            "SV":       _f(s.get("saves")),
-            "K":        k,
-            "ERA":      era,
-            "WHIP":     whip,
-            # Advanced (Savant / FanGraphs style)
-            "K9":       round(k9,   2) if k9   is not None else None,
-            "BB9":      round(bb9,  2) if bb9  is not None else None,
-            "K_BB_pct": round(k_bb, 3) if k_bb is not None else None,
-            "FIP":      round(fip,  2) if fip  is not None else None,
-            "BABIP":    babip,
-            # Volume
-            "IP":       ip,
-            "BF":       bf,
-            "HR":       hr,
-            "GS":       float(started),
-            "G":        float(games),
-            # Position
-            "mlb_pos":  "SP" if is_sp else "RP",
-            "fantasy_eligible": eligible,
-        }
+    k    = _f(s.get("strikeOuts"))
+    bb   = _f(s.get("baseOnBalls"))
+    hr   = _f(s.get("homeRuns"))
+    bf   = _f(s.get("battersFaced"))
+    era  = _f(s.get("era"))
+    whip = _f(s.get("whip"))
+    babip = _f(s.get("babip"))
+
+    k9    = _div((k  or 0) * 9, ip)
+    bb9   = _div((bb or 0) * 9, ip)
+    k_bb  = _div((k or 0) - (bb or 0), bf) if bf else None
+    fip   = ((13 * (hr or 0) + 3 * (bb or 0) - 2 * (k or 0)) / ip + FIP_CONSTANT) if ip else None
+
+    return _normalize(name), {
+        "W":        _f(s.get("wins")),
+        "BB":       bb,
+        "HLD":      _f(s.get("holds")),
+        "SV":       _f(s.get("saves")),
+        "K":        k,
+        "ERA":      era,
+        "WHIP":     whip,
+        "K9":       round(k9,   2) if k9   is not None else None,
+        "BB9":      round(bb9,  2) if bb9  is not None else None,
+        "K_BB_pct": round(k_bb, 3) if k_bb is not None else None,
+        "FIP":      round(fip,  2) if fip  is not None else None,
+        "BABIP":    babip,
+        "IP":       ip,
+        "BF":       bf,
+        "HR":       hr,
+        "GS":       float(started),
+        "G":        float(games),
+        "name":     name,
+        "team":     split.get("team", {}).get("name", ""),
+        "mlb_pos":  "SP" if is_sp else "RP",
+        "fantasy_eligible": eligible,
+    }
+
+
+def get_pitching_stats_by_name(season=2025):
+    """Return {norm_name: stat_dict} for pitchers with ≥2 IP in the season."""
+    result = {}
+    for split in _fetch_all("pitching", season):
+        k, v = _pitcher_row(split, min_ip=2)
+        if k:
+            result[k] = v
+    return result
+
+
+def get_milb_pitching(level, season=2026, min_ip=15):
+    """Return {norm_name: stat_dict} for pitchers at a single MiLB level."""
+    sport_id = MILB_SPORTS[level]
+    result = {}
+    for split in _fetch_all("pitching", season, sport_id=sport_id):
+        k, v = _pitcher_row(split, min_ip=min_ip)
+        if k:
+            v["level"] = level
+            result[k] = v
     return result
 
 
