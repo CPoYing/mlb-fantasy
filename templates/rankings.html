@@ -73,7 +73,11 @@
 
     <div class="hint" style="margin-bottom:8px">
         Z 分採 <strong>2026 × 0.80 + 2025 × 0.20</strong> 加權；標籤
-        <span class="source-tag">26</span> 純當季、<span class="source-tag">25</span> 純去年（傷兵/未出賽）、<span class="source-tag">26+25</span> 混合。
+        <span class="source-tag">26</span> 純當季、<span class="source-tag">25</span> 純去年、<span class="source-tag">26+25</span> 混合。
+        <br>
+        <strong>SP</strong> 跟自己這群比（5 cat: W/BB/K/ERA/WHIP）、<strong>RP</strong> 跟 RP 比（6 cat: BB/HLD/SV/K/ERA/WHIP）。
+        雙守位 IP&gt;35 算 SP；IP&lt;10 且 2025 沒數據或 ERA&gt;4 直接排除。
+        RP 旁的 <span class="badge badge-gold">CL</span>=closer、<span class="badge badge-green">SU</span>=setup。
     </div>
 
     <div class="tbl-wrap" id="rnk-wrap" style="display:none">
@@ -229,10 +233,12 @@ function render() {
             return `<td class="num">${fmt(v)}</td>`;
         }).join('') : '';
 
+        const tierBadge = p.tier === 'closer' ? ' <span class="badge badge-gold">CL</span>' :
+                          p.tier === 'setup'  ? ' <span class="badge badge-green">SU</span>' : '';
         return `<tr>
             <td class="num" style="color:var(--red);font-weight:700">${localRank}</td>
             <td class="name-cell">
-                <span class="player-name">${esc(p.name)}</span>
+                <span class="player-name">${esc(p.name)}</span>${tierBadge}
                 <span class="source-tag">${sourceLabel(p.source)}</span>
             </td>
             <td><div class="pos-chips">${ep}</div></td>

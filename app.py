@@ -113,13 +113,21 @@ def _build_roster_view(roster, values):
     return batters, pitchers
 
 
-def _roster_cat_totals(roster_view):
-    """Sum z-scores per category for a roster (batters or pitchers)."""
-    totals = {}
+def _roster_cat_totals(roster_view, cats=None):
+    """Sum z-scores per category for a roster (batters or pitchers).
+    If `cats` is given, returns a dict keyed by every cat (with 0.0 for any
+    cat that no roster member contributes to), so the totals row in the
+    UI lines up with the table headers."""
+    totals = {c: 0.0 for c in cats} if cats else {}
     for p in roster_view:
         for cat, z in p.get("cats", {}).items():
             totals[cat] = totals.get(cat, 0.0) + z
     return {k: round(v, 2) for k, v in totals.items()}
+
+
+def _team_total(roster_view):
+    """Sum of individual totals — overall team strength."""
+    return round(sum((p.get("total") or 0) for p in roster_view), 2)
 
 
 # ── Pages ──────────────────────────────────────────────────────
@@ -141,10 +149,14 @@ def dashboard():
                 values  = player_values.compute_player_values()
                 batters, pitchers = _build_roster_view(roster, values)
                 my_team_display = {
-                    "team":       my_team,
-                    "batters":    batters,
-                    "pitchers":   pitchers,
-                    "league_key": league_key,
+                    "team":           my_team,
+                    "batters":        batters,
+                    "pitchers":       pitchers,
+                    "league_key":     league_key,
+                    "batter_totals":  _roster_cat_totals(batters,  BATTING_CATS),
+                    "pitcher_totals": _roster_cat_totals(pitchers, PITCHING_CATS),
+                    "batter_team_z":  _team_total(batters),
+                    "pitcher_team_z": _team_total(pitchers),
                 }
 
         return render_template(
@@ -237,18 +249,29 @@ def waiver(league_key):
         bv, pv    = player_values.compute_player_values()
         norm      = mlb_stats._normalize
 
-        # Worst z-score on my roster per fantasy position (used to compute upgrade)
-        my_worst_by_pos = {}  # pos → (z_score, player_name)
+        # Worst z on my roster — split by role so cross-role comparisons
+        # don't happen (SP and RP are scored against different norms).
+        my_worst_bat_by_pos    = {}  # batter position → (z, name)
+        my_worst_pitcher_by_role = {}  # "SP" or "RP" → (z, name)
         for p in my_roster:
             src = bv if p["is_batter"] else pv
             v = src.get(norm(p["name"]), {})
             z = v.get("total")
             if z is None:
                 continue
-            for pos in (p.get("eligible_positions") or [p.get("position", "")]):
-                cur = my_worst_by_pos.get(pos)
-                if cur is None or z < cur[0]:
-                    my_worst_by_pos[pos] = (z, p["name"])
+            if p["is_batter"]:
+                for pos in (p.get("eligible_positions") or [p.get("position", "")]):
+                    if pos in ("BN", "IL"):
+                        continue
+                    cur = my_worst_bat_by_pos.get(pos)
+                    if cur is None or z < cur[0]:
+                        my_worst_bat_by_pos[pos] = (z, p["name"])
+            else:
+                role = v.get("role")  # "SP" or "RP"
+                if role:
+                    cur = my_worst_pitcher_by_role.get(role)
+                    if cur is None or z < cur[0]:
+                        my_worst_pitcher_by_role[role] = (z, p["name"])
 
         # Hot players (last 7 days) — flag matching FAs
         hot = mlb_stats.get_hot_players(days=7)
@@ -275,20 +298,30 @@ def waiver(league_key):
             analysis    = api.analyze_player(stats, is_batter)
             eligible    = stats.get("fantasy_eligible") or player_values.default_eligible(is_batter, fa["position"])
 
-            # Marginal upgrade: best (z - my_worst_at_eligible_pos) across eligible positions
+            # Marginal upgrade — compare within the right pool only:
+            # batter FAs vs my worst batter at each eligible position;
+            # SP FAs vs my worst SP; RP FAs vs my worst RP. Cross-role
+            # comparison would be unfair (different cat sets / norms).
             upgrade = None
             upgrade_over = None
             if z_total is not None:
-                for pos in eligible:
-                    if pos in ("BN", "IL"):
-                        continue
-                    cur = my_worst_by_pos.get(pos)
-                    if cur is None:
-                        continue
-                    delta = z_total - cur[0]
-                    if upgrade is None or delta > upgrade:
-                        upgrade = round(delta, 2)
-                        upgrade_over = f"{cur[1]} ({pos})"
+                if is_batter:
+                    for pos in eligible:
+                        if pos in ("BN", "IL"):
+                            continue
+                        cur = my_worst_bat_by_pos.get(pos)
+                        if cur is None:
+                            continue
+                        delta = z_total - cur[0]
+                        if upgrade is None or delta > upgrade:
+                            upgrade = round(delta, 2)
+                            upgrade_over = f"{cur[1]} ({pos})"
+                else:
+                    role = v.get("role")
+                    cur  = my_worst_pitcher_by_role.get(role) if role else None
+                    if cur is not None:
+                        upgrade = round(z_total - cur[0], 2)
+                        upgrade_over = f"{cur[1]} ({role})"
 
             enriched.append({
                 "name":          fa["name"],
@@ -298,6 +331,8 @@ def waiver(league_key):
                 "status":        fa["status"],
                 "percent_owned": fa["percent_owned"],
                 "is_batter":     is_batter,
+                "role":          v.get("role"),
+                "tier":          v.get("tier"),
                 "stats":         stats,
                 "z_total":       round(z_total, 2) if z_total is not None else None,
                 "cats":          cats,
@@ -363,6 +398,8 @@ def api_rankings(league_key):
                 "cats":               val["cats"],
                 "adv":                adv,
                 "source":             val.get("source", ""),
+                "role":               val.get("role", ""),
+                "tier":               val.get("tier", ""),
                 "is_batter":          val["is_batter"],
             }
 
