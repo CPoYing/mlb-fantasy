@@ -1,57 +1,86 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>⚾ MLB Fantasy Dashboard</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Segoe UI', Arial, sans-serif; background: #0f0f1a; color: #e0e0e0; min-height: 100vh; }
-        nav { background: #1a1a2e; padding: 15px 30px; display: flex; align-items: center; gap: 20px; border-bottom: 2px solid #6001d2; }
-        nav h1 { color: #a855f7; font-size: 1.3rem; flex: 1; }
-        nav a { color: #ccc; text-decoration: none; padding: 6px 14px; border-radius: 6px; transition: background 0.2s; }
-        nav a:hover { background: #6001d2; color: white; }
-        .container { max-width: 1100px; margin: 30px auto; padding: 0 20px; }
-        .card { background: #1a1a2e; border-radius: 12px; padding: 24px; margin-bottom: 24px; border: 1px solid #2a2a4a; }
-        .card h2 { color: #a855f7; margin-bottom: 16px; font-size: 1.2rem; }
-        table { width: 100%; border-collapse: collapse; }
-        th { background: #6001d2; color: white; padding: 10px 14px; text-align: left; }
-        td { padding: 10px 14px; border-bottom: 1px solid #2a2a4a; }
-        tr:hover td { background: #1f1f3a; }
-        .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: bold; }
-        .badge-purple { background: #6001d2; color: white; }
-        .badge-green { background: #16a34a; color: white; }
-        .badge-yellow { background: #ca8a04; color: white; }
-        .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; margin-top: 12px; }
-        .stat-box { background: #0f0f1a; border-radius: 8px; padding: 12px; text-align: center; border: 1px solid #2a2a4a; }
-        .stat-box .val { font-size: 1.6rem; font-weight: bold; color: #a855f7; }
-        .stat-box .lbl { font-size: 0.75rem; color: #888; margin-top: 4px; }
-        .btn { display: inline-block; padding: 8px 18px; border-radius: 8px; text-decoration: none; font-size: 0.9rem; cursor: pointer; border: none; }
-        .btn-primary { background: #6001d2; color: white; }
-        .btn-primary:hover { background: #7c3aed; }
-        .btn-outline { border: 1px solid #6001d2; color: #a855f7; background: transparent; }
-        .btn-outline:hover { background: #6001d2; color: white; }
-        .tab-bar { display: flex; gap: 8px; margin-bottom: 20px; }
-        .vs-box { display: flex; align-items: center; justify-content: space-around; padding: 30px; }
-        .vs-team { text-align: center; }
-        .vs-team .pts { font-size: 3rem; font-weight: bold; color: #a855f7; }
-        .vs-team .name { font-size: 1.1rem; margin-top: 8px; }
-        .vs-sep { font-size: 2rem; color: #555; }
-        .suggestion-item { padding: 12px 16px; border-left: 3px solid #6001d2; margin-bottom: 10px; background: #0f0f1a; border-radius: 0 8px 8px 0; }
-        .empty { color: #555; text-align: center; padding: 40px; }
-        select { background: #0f0f1a; color: #e0e0e0; border: 1px solid #2a2a4a; padding: 8px 14px; border-radius: 8px; font-size: 0.9rem; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#14213d">
+<title>{% block title %}MLB Fantasy{% endblock %} · 菜政宜的秘密花園</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+<script>
+(function() {
+    var saved = localStorage.getItem('mlb-theme');
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var theme = saved || (prefersDark ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', theme);
+})();
+</script>
 </head>
 <body>
-    <nav>
-        <h1>⚾ MLB Fantasy Dashboard</h1>
+
+<header class="topbar">
+    <div class="topbar-inner">
+        <a href="{{ url_for('index') }}" class="brand" style="text-decoration:none">
+            <span class="dot">●</span> MLB FANTASY
+        </a>
         {% if session.get('access_token') %}
-        <a href="{{ url_for('dashboard') }}">我的聯盟</a>
-        <a href="{{ url_for('logout') }}">登出</a>
+        <span class="league-tag">菜政宜的秘密花園</span>
         {% endif %}
-    </nav>
-    <div class="container">
-        {% block content %}{% endblock %}
+
+        <nav class="nav" aria-label="Main">
+            {% if session.get('access_token') and league_key is defined and league_key %}
+            <a href="{{ url_for('dashboard') }}"
+               class="{% if active_page == 'dashboard' %}active{% endif %}">Dashboard</a>
+            <a href="{{ url_for('matchup',  league_key=league_key) }}"
+               class="{% if active_page == 'matchup' %}active{% endif %}">本週對戰</a>
+            <a href="{{ url_for('rankings', league_key=league_key) }}"
+               class="{% if active_page == 'rankings' %}active{% endif %}">球員排名</a>
+            <a href="{{ url_for('waiver',   league_key=league_key) }}"
+               class="{% if active_page == 'waiver' %}active{% endif %}">Waiver</a>
+            <a href="{{ url_for('schedule', league_key=league_key) }}"
+               class="{% if active_page == 'schedule' %}active{% endif %}">週賽程</a>
+            <span class="nav-divider"></span>
+            <a href="{{ url_for('logout') }}">登出</a>
+            {% elif session.get('access_token') %}
+            <a href="{{ url_for('dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('logout') }}">登出</a>
+            {% endif %}
+
+            <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode" title="切換深淺色">
+                <span id="themeIcon">◐</span>
+            </button>
+        </nav>
     </div>
+</header>
+
+<main class="container">
+    {% block content %}{% endblock %}
+</main>
+
+<footer class="footer">
+    EST · 2026 SEASON · TOPPS-STYLE EDITION
+</footer>
+
+<script>
+(function() {
+    var btn = document.getElementById('themeToggle');
+    var icon = document.getElementById('themeIcon');
+    function syncIcon() {
+        var t = document.documentElement.getAttribute('data-theme');
+        icon.textContent = t === 'dark' ? '☾' : '☀';
+    }
+    syncIcon();
+    btn.addEventListener('click', function() {
+        var cur = document.documentElement.getAttribute('data-theme');
+        var next = cur === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('mlb-theme', next);
+        syncIcon();
+    });
+})();
+</script>
+
 </body>
 </html>

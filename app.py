@@ -6,16 +6,18 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import yahoo_api as api
 import email_report
 import mlb_schedule
-import draft_engine
 import mlb_stats
+import player_values
 
 load_dotenv()
 
-# Allow OAuth over HTTPS with self-signed cert
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "0"
 
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "mlb-fantasy-secret-key-2024")
+_secret = os.getenv("SECRET_KEY")
+if not _secret:
+    raise RuntimeError("SECRET_KEY env var is required. Set it in .env before starting.")
+app.secret_key = _secret
 
 CLIENT_ID = os.getenv("YAHOO_CLIENT_ID")
 CLIENT_SECRET = os.getenv("YAHOO_CLIENT_SECRET")
@@ -24,11 +26,12 @@ REDIRECT_URI = os.getenv("YAHOO_REDIRECT_URI")
 AUTHORIZATION_BASE_URL = "https://api.login.yahoo.com/oauth2/request_auth"
 TOKEN_URL = "https://api.login.yahoo.com/oauth2/get_token"
 
-# Global oauth object (also used in yahoo_api.py for token refresh)
 oauth = None
+
 
 def make_oauth():
     return OAuth2Session(CLIENT_ID, redirect_uri=REDIRECT_URI)
+
 
 # ── Auth ───────────────────────────────────────────────────────
 
@@ -38,6 +41,7 @@ def index():
         return render_template("login.html")
     return redirect(url_for("dashboard"))
 
+
 @app.route("/login")
 def login():
     global oauth
@@ -46,6 +50,7 @@ def login():
     session["oauth_state"] = state
     return redirect(auth_url)
 
+
 @app.route("/callback")
 def callback():
     global oauth
@@ -53,16 +58,57 @@ def callback():
     token = oauth.fetch_token(
         TOKEN_URL,
         client_secret=CLIENT_SECRET,
-        authorization_response=request.url.replace("https://", "https://")
+        authorization_response=request.url,
     )
     session["access_token"] = token["access_token"]
     session["refresh_token"] = token.get("refresh_token", "")
     return redirect(url_for("dashboard"))
 
+
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect(url_for("index"))
+
+
+# ── Helpers ────────────────────────────────────────────────────
+
+BATTING_CATS  = ["R", "HR", "RBI", "SB", "AVG"]
+PITCHING_CATS = ["W", "SV", "K", "ERA", "WHIP"]
+
+
+def _build_roster_view(roster, values):
+    """Attach z-score totals + cat z-scores to a roster list."""
+    norm = mlb_stats._normalize
+    batters, pitchers = [], []
+    for p in roster:
+        v   = values.get(norm(p["name"]), {})
+        row = {
+            "name":      p["name"],
+            "position":  p["position"],
+            "team":      p["team"],
+            "headshot":  p.get("headshot", ""),
+            "is_batter": p["is_batter"],
+            "stats":     p.get("stats", {}),
+            "total":     round(v["total"], 2) if v.get("total") is not None else None,
+            "cats":      v.get("cats", {}),
+            "analysis":  p.get("analysis", {"strengths": [], "weaknesses": []}),
+            "stat_keys": BATTING_CATS if p["is_batter"] else PITCHING_CATS,
+        }
+        (batters if p["is_batter"] else pitchers).append(row)
+    batters.sort(key=lambda x: x["total"] or -99, reverse=True)
+    pitchers.sort(key=lambda x: x["total"] or -99, reverse=True)
+    return batters, pitchers
+
+
+def _roster_cat_totals(roster_view):
+    """Sum z-scores per category for a roster (batters or pitchers)."""
+    totals = {}
+    for p in roster_view:
+        for cat, z in p.get("cats", {}).items():
+            totals[cat] = totals.get(cat, 0.0) + z
+    return {k: round(v, 2) for k, v in totals.items()}
+
 
 # ── Pages ──────────────────────────────────────────────────────
 
@@ -74,389 +120,239 @@ def dashboard():
         leagues     = api.get_user_leagues()
         hot_players = mlb_stats.get_hot_players(days=7)
 
-        # Build my team data with z-scores for the first league found
         my_team_display = None
         if leagues:
             league_key = leagues[0]["league_key"]
-            my_team = api.get_my_team(league_key)
+            my_team    = api.get_my_team(league_key)
             if my_team:
                 roster  = api.get_team_roster_with_stats(my_team["team_key"])
-                values  = draft_engine.compute_player_values()
-                norm    = mlb_stats._normalize
-                BATTING_CATS  = ["R", "HR", "RBI", "SB", "AVG"]
-                PITCHING_CATS = ["W", "SV", "K", "ERA", "WHIP"]
-
-                batters, pitchers = [], []
-                for p in roster:
-                    nk  = norm(p["name"])
-                    val = values.get(nk, {})
-                    cats = val.get("cats", {})
-                    total = val.get("total", None)
-                    row = {
-                        "name":     p["name"],
-                        "position": p["position"],
-                        "team":     p["team"],
-                        "total":    round(total, 2) if total is not None else None,
-                        "cats":     cats,
-                    }
-                    if p["is_batter"]:
-                        row["stat_keys"] = BATTING_CATS
-                        batters.append(row)
-                    else:
-                        row["stat_keys"] = PITCHING_CATS
-                        pitchers.append(row)
-
-                batters.sort(key=lambda x: x["total"] or -99, reverse=True)
-                pitchers.sort(key=lambda x: x["total"] or -99, reverse=True)
+                values  = player_values.compute_player_values()
+                batters, pitchers = _build_roster_view(roster, values)
                 my_team_display = {
-                    "team":     my_team,
-                    "batters":  batters,
-                    "pitchers": pitchers,
+                    "team":       my_team,
+                    "batters":    batters,
+                    "pitchers":   pitchers,
                     "league_key": league_key,
                 }
 
-        return render_template("dashboard.html", leagues=leagues,
-                               hot_players=hot_players,
-                               my_team_display=my_team_display)
+        return render_template(
+            "dashboard.html",
+            leagues=leagues,
+            hot_players=hot_players,
+            my_team_display=my_team_display,
+            league_key=(leagues[0]["league_key"] if leagues else None),
+            active_page="dashboard",
+        )
     except Exception as e:
         import traceback; traceback.print_exc()
         return render_template("error.html", error=str(e))
 
-@app.route("/team/<league_key>")
-def team(league_key):
-    if "access_token" not in session:
-        return redirect(url_for("login"))
-    try:
-        my_team = api.get_my_team(league_key)
-        if not my_team:
-            return render_template("error.html", error="找不到你的隊伍，請確認你有加入這個聯盟。")
-        roster = api.get_team_roster(my_team["team_key"])
-        stats = api.get_team_stats(my_team["team_key"])
-        return render_template("team.html", team=my_team, roster=roster, stats=stats, league_key=league_key)
-    except Exception as e:
-        return render_template("error.html", error=str(e))
 
 @app.route("/matchup/<league_key>")
 def matchup(league_key):
+    """Combined current-week matchup + H2H roster compare + recommendations."""
     if "access_token" not in session:
         return redirect(url_for("login"))
     try:
-        my_team = api.get_my_team(league_key)
+        all_teams = api.get_all_league_teams(league_key)
+        my_team   = next((t for t in all_teams if t["is_mine"]), None)
         if not my_team:
             return render_template("error.html", error="找不到你的隊伍。")
-        matchup_data = api.get_current_matchup(my_team["team_key"])
-        return render_template("matchup.html", matchup=matchup_data, my_team=my_team, league_key=league_key)
+
+        # Current week scoreboard (Yahoo)
+        matchup_data = api.get_current_matchup(my_team["team_key"]) or {}
+
+        # Opponent selection: explicit param > this week's opponent > none
+        opp_key = request.args.get("opp_key", "").strip()
+        if not opp_key and matchup_data.get("teams"):
+            for t in matchup_data["teams"]:
+                if t["team_key"] != my_team["team_key"]:
+                    opp_key = t["team_key"]
+                    break
+
+        values     = player_values.compute_player_values()
+        my_roster  = api.get_team_roster_with_stats(my_team["team_key"])
+        my_bat, my_pit = _build_roster_view(my_roster, values)
+
+        opp_team   = next((t for t in all_teams if t["team_key"] == opp_key), None)
+        opp_bat, opp_pit = [], []
+        if opp_key:
+            opp_roster = api.get_team_roster_with_stats(opp_key)
+            opp_bat, opp_pit = _build_roster_view(opp_roster, values)
+
+        # Per-category strength compare (z-totals)
+        my_cats  = {**_roster_cat_totals(my_bat),  **_roster_cat_totals(my_pit)}
+        opp_cats = {**_roster_cat_totals(opp_bat), **_roster_cat_totals(opp_pit)}
+
+        return render_template(
+            "matchup.html",
+            league_key=league_key,
+            scoreboard=matchup_data,
+            my_team=my_team,
+            opp_team=opp_team,
+            opp_key=opp_key,
+            all_teams=all_teams,
+            my_batters=my_bat,
+            my_pitchers=my_pit,
+            opp_batters=opp_bat,
+            opp_pitchers=opp_pit,
+            my_cats=my_cats,
+            opp_cats=opp_cats,
+            batting_cats=BATTING_CATS,
+            pitching_cats=PITCHING_CATS,
+            active_page="matchup",
+        )
     except Exception as e:
+        import traceback; traceback.print_exc()
         return render_template("error.html", error=str(e))
 
-@app.route("/free-agents/<league_key>")
-def free_agents(league_key):
+
+@app.route("/waiver/<league_key>")
+def waiver(league_key):
+    """Waiver / FA recommendations — focused on marginal upgrade to my roster."""
     if "access_token" not in session:
         return redirect(url_for("login"))
     position = request.args.get("position", "B")
     try:
-        players = api.get_free_agents(league_key, position=position)
-        return render_template("free_agents.html", players=players, league_key=league_key, position=position)
-    except Exception as e:
-        return render_template("error.html", error=str(e))
+        # FA pool (Yahoo)
+        fa_pool = api.get_free_agents(league_key, position=position, count=50)
 
-@app.route("/trades/<league_key>")
-def trades(league_key):
-    if "access_token" not in session:
-        return redirect(url_for("login"))
-    try:
-        my_team = api.get_my_team(league_key)
-        all_teams = api.get_all_teams_rosters(league_key)
-        suggestions = generate_trade_suggestions(my_team, all_teams)
-        return render_template("trades.html", suggestions=suggestions, my_team=my_team, league_key=league_key)
-    except Exception as e:
-        return render_template("error.html", error=str(e))
+        # My roster (for marginal upgrade)
+        all_teams = api.get_all_league_teams(league_key)
+        my_team   = next((t for t in all_teams if t["is_mine"]), None)
+        my_roster = api.get_team_roster_with_stats(my_team["team_key"]) if my_team else []
 
-@app.route("/debug/players/<league_key>")
-def debug_players(league_key):
-    if "access_token" not in session:
-        return redirect(url_for("login"))
-    import json
-    data = api.api_get(f"/league/{league_key}/players;out=stats", params={"sort": "AR", "start": 0, "count": 3, "format": "json"})
-    return f"<pre>{json.dumps(data, indent=2)}</pre>"
+        values    = player_values.compute_player_values()
+        norm      = mlb_stats._normalize
 
-@app.route("/draft/<league_key>")
-def draft(league_key):
-    if "access_token" not in session:
-        return redirect(url_for("login"))
-    try:
-        settings = api.get_league_settings(league_key)
-        my_team  = api.get_my_team(league_key)
-        return render_template("draft.html", league_key=league_key,
-                               settings=settings, my_team=my_team)
-    except Exception as e:
-        return render_template("error.html", error=str(e))
+        # Worst z-score on my roster per fantasy position (used to compute upgrade)
+        my_worst_by_pos = {}  # pos → (z_score, player_name)
+        for p in my_roster:
+            v = values.get(norm(p["name"]), {})
+            z = v.get("total")
+            if z is None:
+                continue
+            for pos in (p.get("eligible_positions") or [p.get("position", "")]):
+                cur = my_worst_by_pos.get(pos)
+                if cur is None or z < cur[0]:
+                    my_worst_by_pos[pos] = (z, p["name"])
 
-# Server-side cache for draft results (10-second TTL)
-_draft_cache = {}
-def _get_cached_draft(league_key):
-    import time
-    now = time.time()
-    cached = _draft_cache.get(league_key)
-    if cached and (now - cached["t"]) < 10:
-        return cached["data"]
-    data = api.get_draft_results(league_key)
-    _draft_cache[league_key] = {"t": now, "data": data}
-    return data
+        # Hot players (last 7 days) — flag matching FAs
+        hot = mlb_stats.get_hot_players(days=7)
+        hot_names = set()
+        for grp in ("hitters", "pitchers"):
+            for h in hot.get(grp, []):
+                hot_names.add(norm(h.get("name", "")))
 
-@app.route("/api/draft/<league_key>")
-def api_draft(league_key):
-    if "access_token" not in session:
-        return jsonify({"error": "not authenticated"}), 401
-    try:
-        settings    = api.get_league_settings(league_key)
-        player_pool = api.get_draft_player_pool(league_key)
-        draft_results = _get_cached_draft(league_key)
-        my_team     = api.get_my_team(league_key)
-        all_teams   = api.get_all_league_teams(league_key)
-        teams_dict  = {t["team_key"]: t for t in all_teams}
+        # MLB merged stats by name (covers FAs that aren't qualified for values)
+        hitting  = mlb_stats.get_hitting_stats_merged()
+        pitching = mlb_stats.get_pitching_stats_merged()
 
-        result = draft_engine.get_recommendations(
-            player_pool     = player_pool,
-            draft_results   = draft_results,
-            my_team_key     = my_team["team_key"] if my_team else "",
-            teams_dict      = teams_dict,
-            roster_positions= settings["roster_positions"],
-            num_teams       = settings["num_teams"],
+        enriched = []
+        for fa in fa_pool:
+            nk          = norm(fa["name"])
+            v           = values.get(nk, {})
+            is_batter   = v.get("is_batter") if v else (fa["position"] not in ("SP", "RP", "P"))
+            stats       = v.get("stats") or (hitting.get(nk, {}) if is_batter else pitching.get(nk, {}))
+            z_total     = v.get("total")
+            cats        = v.get("cats", {})
+            analysis    = api.analyze_player(stats, is_batter)
+            eligible    = stats.get("fantasy_eligible") or player_values.default_eligible(is_batter, fa["position"])
+
+            # Marginal upgrade: best (z - my_worst_at_eligible_pos) across eligible positions
+            upgrade = None
+            upgrade_over = None
+            if z_total is not None:
+                for pos in eligible:
+                    if pos in ("BN", "IL"):
+                        continue
+                    cur = my_worst_by_pos.get(pos)
+                    if cur is None:
+                        continue
+                    delta = z_total - cur[0]
+                    if upgrade is None or delta > upgrade:
+                        upgrade = round(delta, 2)
+                        upgrade_over = f"{cur[1]} ({pos})"
+
+            enriched.append({
+                "name":          fa["name"],
+                "position":      fa["position"],
+                "eligible":      [p for p in eligible if p not in ("BN", "IL")],
+                "team":          fa["team"],
+                "status":        fa["status"],
+                "percent_owned": fa["percent_owned"],
+                "is_batter":     is_batter,
+                "stats":         stats,
+                "z_total":       round(z_total, 2) if z_total is not None else None,
+                "cats":          cats,
+                "analysis":      analysis,
+                "upgrade":       upgrade,
+                "upgrade_over":  upgrade_over,
+                "is_hot":        nk in hot_names,
+            })
+
+        # Sort: best marginal upgrade first; fall back to z_total; fall back to percent_owned
+        enriched.sort(key=lambda p: (
+            -(p["upgrade"] if p["upgrade"] is not None else -99),
+            -(p["z_total"] if p["z_total"] is not None else -99),
+            -float(p["percent_owned"] or 0),
+        ))
+
+        return render_template(
+            "waiver.html",
+            players=enriched,
+            league_key=league_key,
+            position=position,
+            batting_cats=BATTING_CATS,
+            pitching_cats=PITCHING_CATS,
+            my_team=my_team,
+            active_page="waiver",
         )
-        result["draft_status"] = settings.get("draft_status", "predraft")
-        result["pick_time"]    = settings.get("draft_pick_time", 45)
-        return jsonify(result)
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        import traceback; traceback.print_exc()
+        return render_template("error.html", error=str(e))
 
-@app.route("/debug/draft/<league_key>")
-def debug_draft(league_key):
-    if "access_token" not in session:
-        return redirect(url_for("login"))
-    import json
-    results = {}
-    results["settings"] = api.api_get(f"/league/{league_key}/settings")
-    results["draftresults"] = api.api_get(f"/league/{league_key}/draftresults")
-    results["players_adp"] = api.api_get(f"/league/{league_key}/players", params={"sort": "AD", "count": 3})
-    return f"<pre>{json.dumps(results, indent=2)}</pre>"
 
 @app.route("/rankings/<league_key>")
 def rankings(league_key):
     if "access_token" not in session:
         return redirect(url_for("login"))
-    try:
-        return render_template("rankings.html", league_key=league_key)
-    except Exception as e:
-        return render_template("error.html", error=str(e))
+    return render_template("rankings.html", league_key=league_key, active_page="rankings")
+
 
 @app.route("/api/rankings/<league_key>")
 def api_rankings(league_key):
     if "access_token" not in session:
         return jsonify({"error": "not authenticated"}), 401
     try:
-        import mlb_stats as mlb
-        player_pool = api.get_draft_player_pool(league_key)
-        values = draft_engine.compute_player_values()
-        norm = mlb._normalize
+        values = player_values.compute_player_values()
+        norm   = mlb_stats._normalize
 
-        pool_by_name = {norm(p["name"]): p for p in player_pool}
-
-        # Build full ranked list from MLB Stats values universe
-        all_players = []
+        rows = []
         for name_key, val in values.items():
-            pool_info = pool_by_name.get(name_key, {})
             is_batter = val["is_batter"]
-            mlb_pos   = val["stats"].get("mlb_pos", "")
-            mlb_elig  = val["stats"].get("fantasy_eligible", [])
-            position  = pool_info.get("position") or mlb_pos or ("SP" if not is_batter else "OF")
-            eligible  = pool_info.get("eligible_positions") or mlb_elig or draft_engine._default_eligible(is_batter, position)
-            all_players.append({
-                "name":               pool_info.get("name", name_key.title()),
-                "team":               pool_info.get("team", ""),
-                "headshot":           pool_info.get("headshot", ""),
-                "position":           position,
+            stats     = val["stats"]
+            mlb_pos   = stats.get("mlb_pos", "")
+            eligible  = stats.get("fantasy_eligible") or player_values.default_eligible(is_batter, mlb_pos)
+            primary   = mlb_pos or ("SP" if not is_batter else "OF")
+            rows.append({
+                "name":               name_key.title(),
+                "team":               "",
+                "headshot":           "",
+                "position":           primary,
                 "eligible_positions": eligible,
-                "yahoo_rank":         pool_info.get("yahoo_rank", 9999),
-                "z_score":            val["total"],
+                "z_score":            round(val["total"], 2),
                 "cats":               val["cats"],
                 "is_batter":          is_batter,
             })
 
-        # Add Yahoo pool players not in values (rookies)
-        for p in player_pool:
-            nk = norm(p["name"])
-            if nk not in values:
-                is_batter = p.get("is_batter", True)
-                all_players.append({
-                    "name":               p["name"],
-                    "team":               p.get("team", ""),
-                    "headshot":           p.get("headshot", ""),
-                    "position":           p.get("position", ""),
-                    "eligible_positions": p.get("eligible_positions", []),
-                    "yahoo_rank":         p.get("yahoo_rank", 9999),
-                    "z_score":            0.0,
-                    "cats":               {},
-                    "is_batter":          is_batter,
-                })
-
-        # Sort by z_score → assign BPA rank
-        all_players.sort(key=lambda x: x["z_score"], reverse=True)
-
-        result = []
-        for i, p in enumerate(all_players):
-            bpa_rank = i + 1
-            has_adp  = p["yahoo_rank"] < 900
-            adp_rank = p["yahoo_rank"] if has_adp else None
-            value    = (adp_rank - bpa_rank) if has_adp else None
-            result.append({
-                "rank":               bpa_rank,
-                "name":               p["name"],
-                "team":               p["team"],
-                "headshot":           p["headshot"],
-                "position":           p["position"],
-                "eligible_positions": p["eligible_positions"],
-                "adp":                adp_rank,
-                "value":              value,
-                "z_score":            round(p["z_score"], 2),
-                "cats":               p["cats"],
-                "is_batter":          p["is_batter"],
-            })
-
+        rows.sort(key=lambda x: x["z_score"], reverse=True)
+        result = [{**r, "rank": i + 1, "adp": None, "value": None} for i, r in enumerate(rows)]
         return jsonify({"players": result})
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@app.route("/players/<league_key>")
-def players(league_key):
-    if "access_token" not in session:
-        return redirect(url_for("login"))
-    position = request.args.get("position", "ALL")
-    sort_cat = request.args.get("sort", "z_score")
-    start    = int(request.args.get("start", 0))
-    try:
-        import mlb_stats as mlb
-        from yahoo_api import analyze_player
-        player_pool = api.get_draft_player_pool(league_key)
-        values      = draft_engine.compute_player_values()
-        norm        = mlb._normalize
-        pool_by_name = {norm(p["name"]): p for p in player_pool}
-
-        # Build full list from MLB Stats universe
-        all_players = []
-        for name_key, val in values.items():
-            pool_info = pool_by_name.get(name_key, {})
-            is_batter = val["is_batter"]
-            mlb_pos   = val["stats"].get("mlb_pos", "")
-            mlb_elig  = val["stats"].get("fantasy_eligible", [])
-            position_str = pool_info.get("position") or mlb_pos or ("SP" if not is_batter else "OF")
-            eligible     = pool_info.get("eligible_positions") or mlb_elig or draft_engine._default_eligible(is_batter, position_str)
-
-            # Position filter
-            if position != "ALL" and position not in eligible and position != position_str:
-                continue
-
-            all_players.append({
-                "name":       pool_info.get("name", name_key.title()),
-                "position":   position_str,
-                "team":       pool_info.get("team", ""),
-                "headshot":   pool_info.get("headshot", ""),
-                "is_batter":  is_batter,
-                "stats":      val["stats"],
-                "z_score":    val["total"],
-                "cats":       val["cats"],
-                "analysis":   analyze_player(val["stats"], is_batter),
-                "percent_owned": pool_info.get("yahoo_rank", 999),
-            })
-
-        # Sort
-        reverse = True
-        if sort_cat == "ERA" or sort_cat == "WHIP":
-            reverse = False
-        if sort_cat == "z_score":
-            all_players.sort(key=lambda p: p["z_score"], reverse=True)
-        else:
-            all_players.sort(key=lambda p: p["stats"].get(sort_cat) or 0, reverse=reverse)
-
-        total        = len(all_players)
-        player_list  = all_players[start:start + 50]
-        return render_template("players.html", players=player_list, league_key=league_key,
-                               position=position, sort=sort_cat, start=start, total=total)
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        return render_template("error.html", error=str(e))
-
-@app.route("/league-overview/<league_key>")
-def league_overview(league_key):
-    if "access_token" not in session:
-        return redirect(url_for("login"))
-    try:
-        teams = api.get_all_league_teams(league_key)
-        CATS = ["R", "HR", "RBI", "SB", "AVG", "W", "SV", "K", "ERA", "WHIP"]
-        LOWER_BETTER = {"ERA", "WHIP"}
-
-        team_data = []
-        for team in teams:
-            roster = api.get_team_roster_with_stats(team["team_key"])
-            r = hr = rbi = sb = w = sv = k = 0
-            avg_vals = []
-            era_num = whip_num = ip_total = 0.0
-
-            for p in roster:
-                s = p.get("stats", {})
-                if p.get("is_batter"):
-                    r   += s.get("R",   0) or 0
-                    hr  += s.get("HR",  0) or 0
-                    rbi += s.get("RBI", 0) or 0
-                    sb  += s.get("SB",  0) or 0
-                    if s.get("AVG") is not None:
-                        avg_vals.append(s["AVG"])
-                else:
-                    w  += s.get("W",  0) or 0
-                    sv += s.get("SV", 0) or 0
-                    k  += s.get("K",  0) or 0
-                    ip   = float(s.get("IP",   0) or 0)
-                    era  = s.get("ERA")
-                    whip = s.get("WHIP")
-                    if ip > 0:
-                        ip_total += ip
-                        if era  is not None: era_num  += era  * ip
-                        if whip is not None: whip_num += whip * ip
-
-            team_data.append({
-                "name":     team["name"],
-                "team_key": team["team_key"],
-                "is_mine":  team["is_mine"],
-                "players":  len(roster),
-                "R":    int(r), "HR": int(hr), "RBI": int(rbi), "SB": int(sb),
-                "AVG":  round(sum(avg_vals) / len(avg_vals), 3) if avg_vals else 0.0,
-                "W":    int(w), "SV": int(sv), "K": int(k),
-                "ERA":  round(era_num  / ip_total, 2) if ip_total > 0 else 0.0,
-                "WHIP": round(whip_num / ip_total, 2) if ip_total > 0 else 0.0,
-            })
-
-        # Rank each team per category
-        for cat in CATS:
-            ranked = sorted(team_data, key=lambda t: t[cat], reverse=(cat not in LOWER_BETTER))
-            for rank, t in enumerate(ranked, 1):
-                t[f"{cat}_rank"] = rank
-
-        # Total score = sum of ranks (lower = better overall)
-        for t in team_data:
-            t["score"] = sum(t[f"{cat}_rank"] for cat in CATS)
-        team_data.sort(key=lambda t: t["score"])
-        for i, t in enumerate(team_data, 1):
-            t["overall"] = i
-
-        return render_template("league_overview.html", teams=team_data,
-                               league_key=league_key, cats=CATS)
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        return render_template("error.html", error=str(e))
 
 @app.route("/schedule/<league_key>")
 def schedule(league_key):
@@ -464,104 +360,42 @@ def schedule(league_key):
         return redirect(url_for("login"))
     try:
         from datetime import datetime
-        year = datetime.today().year
-        weekly = mlb_schedule.get_weekly_schedule(year)
-        current_week = mlb_schedule.get_current_week_key()
+        year          = datetime.today().year
+        weekly        = mlb_schedule.get_weekly_schedule(year)
+        current_week  = mlb_schedule.get_current_week_key()
         selected_week = request.args.get("week", current_week)
-        week_data = weekly.get(selected_week, {})
-        # Sort teams by game count descending
-        sorted_teams = sorted(
+        week_data     = weekly.get(selected_week, {})
+        sorted_teams  = sorted(
             week_data.get("teams", {}).items(),
             key=lambda x: x[1]["count"], reverse=True
         )
-        return render_template("schedule.html",
-                               league_key=league_key,
-                               weeks=weekly,
-                               selected_week=selected_week,
-                               week_data=week_data,
-                               sorted_teams=sorted_teams,
-                               current_week=current_week)
+        return render_template(
+            "schedule.html",
+            league_key=league_key,
+            weeks=weekly,
+            selected_week=selected_week,
+            week_data=week_data,
+            sorted_teams=sorted_teams,
+            current_week=current_week,
+            active_page="schedule",
+        )
     except Exception as e:
         return render_template("error.html", error=str(e))
 
-@app.route("/h2h/<league_key>")
-def h2h_analysis(league_key):
-    """Head-to-head matchup analysis with player strengths/weaknesses."""
-    if "access_token" not in session:
-        return redirect(url_for("login"))
-    try:
-        all_teams = api.get_all_league_teams(league_key)
-        my_team = next((t for t in all_teams if t["is_mine"]), None)
-
-        # Get opponent team key from query param or find from matchup
-        opp_key = request.args.get("opp_key")
-        if not opp_key and my_team:
-            matchup_data = api.get_current_matchup(my_team["team_key"])
-            if matchup_data and matchup_data.get("teams"):
-                for t in matchup_data["teams"]:
-                    if t["team_key"] != my_team["team_key"]:
-                        opp_key = t["team_key"]
-                        break
-
-        my_roster = api.get_team_roster_with_stats(my_team["team_key"]) if my_team else []
-        opp_roster = api.get_team_roster_with_stats(opp_key) if opp_key else []
-        opp_team = next((t for t in all_teams if t["team_key"] == opp_key), {})
-
-        return render_template("h2h.html",
-                               league_key=league_key,
-                               all_teams=all_teams,
-                               my_team=my_team,
-                               opp_team=opp_team,
-                               opp_key=opp_key,
-                               my_roster=my_roster,
-                               opp_roster=opp_roster)
-    except Exception as e:
-        return render_template("error.html", error=str(e))
-
-def generate_trade_suggestions(my_team, all_teams):
-    """Simple trade suggestion: find teams with excess at your weak positions."""
-    if not my_team or not all_teams:
-        return []
-    suggestions = []
-    my_roster = next((t for t in all_teams if t["team_key"] == my_team["team_key"]), None)
-    if not my_roster:
-        return []
-
-    my_positions = {}
-    for p in my_roster["players"]:
-        for pos in p["position"].split(","):
-            my_positions[pos.strip()] = my_positions.get(pos.strip(), 0) + 1
-
-    for team in all_teams:
-        if team["team_key"] == my_team["team_key"]:
-            continue
-        their_positions = {}
-        for p in team["players"]:
-            for pos in p["position"].split(","):
-                their_positions[pos.strip()] = their_positions.get(pos.strip(), 0) + 1
-
-        for pos in ["SP", "RP", "OF", "1B", "2B", "3B", "SS", "C"]:
-            my_count = my_positions.get(pos, 0)
-            their_count = their_positions.get(pos, 0)
-            if their_count > my_count + 1:
-                suggestions.append({
-                    "team": team["name"],
-                    "suggestion": f"對方在 {pos} 位置有多餘球員（{their_count} 人），你只有 {my_count} 人，可以考慮交易。"
-                })
-    return suggestions[:10]
 
 # ── Scheduler ─────────────────────────────────────────────────
 
 scheduler = BackgroundScheduler()
 
+
 def scheduled_report():
-    """Called by scheduler - needs stored tokens."""
     print("Running scheduled email report...")
-    # Token will be read from a persisted file (see email_report.py)
     email_report.send_weekly_report()
+
 
 scheduler.add_job(scheduled_report, "cron", day_of_week="mon", hour=8, minute=0)
 scheduler.start()
+
 
 # ── Run ────────────────────────────────────────────────────────
 
