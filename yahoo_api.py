@@ -165,41 +165,79 @@ def get_all_league_teams(league_key):
 
 # ── Matchup ────────────────────────────────────────────────────
 
-def get_current_matchup(team_key):
-    """Get current week's matchup for a team."""
+def _parse_matchup(m):
+    """Convert a raw Yahoo matchup dict into a clean shape."""
+    teams_data = m.get("0", {}).get("teams", {})
+    teams = []
+    for j in range(teams_data.get("count", 0)):
+        t = teams_data[str(j)]["team"]
+        team_info   = t[0]
+        team_points = t[1].get("team_points", {}) if len(t) > 1 else {}
+        teams.append({
+            "name":     team_info[2]["name"],
+            "points":   team_points.get("total", "0"),
+            "team_key": team_info[0]["team_key"],
+        })
+    return {
+        "week":            m.get("week"),
+        "status":          m.get("status", ""),          # preevent / midevent / postevent
+        "is_current_week": m.get("is_current_week") == "1",
+        "is_playoffs":     m.get("is_playoffs") == "1",
+        "is_consolation":  m.get("is_consolation") == "1",
+        "week_start":      m.get("week_start", ""),
+        "week_end":        m.get("week_end", ""),
+        "teams":           teams,
+    }
+
+
+def get_team_all_matchups(team_key):
+    """Get every matchup for a team across the whole season.
+
+    One Yahoo API call returns the full schedule (regular season + playoffs).
+    Returns a list sorted by week number, each entry containing week,
+    status, is_current_week, week_start/end, and a list of {name, points,
+    team_key} for both sides.
+    """
     data = api_get(f"/team/{team_key}/matchups")
     try:
         matchups = data["fantasy_content"]["team"][1]["matchups"]
-        for i in range(matchups["count"]):
-            m = matchups[str(i)]["matchup"]
-            if m.get("status") == "midevent" or m.get("is_current_week") == "1" or m.get("week_start"):
-                teams = m["0"]["teams"]
-                result = {"week": m.get("week"), "teams": []}
-                for j in range(teams["count"]):
-                    t = teams[str(j)]["team"]
-                    team_info = t[0]
-                    team_points = t[1].get("team_points", {})
-                    result["teams"].append({
-                        "name":     team_info[2]["name"],
-                        "points":   team_points.get("total", "0"),
-                        "team_key": team_info[0]["team_key"],
-                    })
-                return result
-        # fallback: last matchup
-        last = matchups[str(matchups["count"] - 1)]["matchup"]
-        teams = last["0"]["teams"]
-        result = {"week": last.get("week"), "teams": []}
-        for j in range(teams["count"]):
-            t = teams[str(j)]["team"]
-            result["teams"].append({
-                "name":     t[0][2]["name"],
-                "points":   t[1].get("team_points", {}).get("total", "0"),
-                "team_key": t[0][0]["team_key"],
-            })
-        return result
-    except Exception as e:
-        print(f"Error getting matchup: {e}")
+    except (KeyError, TypeError) as e:
+        print(f"Error reading matchups envelope: {e}")
+        return []
+    result = []
+    for i in range(matchups.get("count", 0)):
+        try:
+            result.append(_parse_matchup(matchups[str(i)]["matchup"]))
+        except Exception as e:
+            print(f"Skipping matchup {i}: {e}")
+    result.sort(key=lambda m: int(m["week"]) if m.get("week") else 0)
+    return result
+
+
+def get_current_matchup(team_key):
+    """Pick the current week's matchup from the full season list.
+
+    Falls back to the latest week with any score data, then to the last
+    entry, so pre-season / off-season requests still return something
+    sensible rather than nothing.
+    """
+    all_m = get_team_all_matchups(team_key)
+    if not all_m:
         return {}
+    # 1. Yahoo's own is_current_week flag (most reliable when set)
+    for m in all_m:
+        if m["is_current_week"]:
+            return m
+    # 2. A live week (midevent)
+    for m in all_m:
+        if m["status"] == "midevent":
+            return m
+    # 3. Last postevent week (most recent completed)
+    posted = [m for m in all_m if m["status"] == "postevent"]
+    if posted:
+        return posted[-1]
+    # 4. Fallback — first scheduled
+    return all_m[0]
 
 
 # ── Roster + Stats ─────────────────────────────────────────────
