@@ -41,10 +41,14 @@
                class="{% if active_page == 'waiver' %}active{% endif %}">Waiver</a>
             <a href="{{ url_for('schedule', league_key=league_key) }}"
                class="{% if active_page == 'schedule' %}active{% endif %}">週賽程</a>
+            <a href="{{ url_for('prospects') }}"
+               class="{% if active_page == 'prospects' %}active{% endif %}">新秀</a>
             <span class="nav-divider"></span>
             <a href="{{ url_for('logout') }}">登出</a>
             {% elif session.get('access_token') %}
             <a href="{{ url_for('dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('prospects') }}"
+               class="{% if active_page == 'prospects' %}active{% endif %}">新秀</a>
             <a href="{{ url_for('logout') }}">登出</a>
             {% endif %}
 

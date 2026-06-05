@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}小聯盟新秀{% endblock %}
+{% block content %}
+
+<style>
+.tab-row {
+    display:flex; gap:6px; margin-bottom:14px;
+    border-bottom: 1px dashed var(--line);
+    padding-bottom: 8px;
+}
+.tab-row button {
+    padding: 6px 16px;
+    border: 1px solid var(--line-strong);
+    background: var(--card);
+    color: var(--ink);
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-family: var(--font-display);
+    font-size: 0.78rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+.tab-row button.active {
+    background: var(--red);
+    color: var(--paper);
+    border-color: var(--red);
+}
+.level-AAA { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+.level-AA  { background: var(--green); color: var(--paper); border-color: var(--green); }
+.level-Ap, .level-A  { background: var(--paper-deep); color: var(--ink); border-color: var(--line); }
+.name-cell { text-align: left !important; }
+</style>
+
+<div class="card">
+    <div class="section-title-row">
+        <h2 class="section-title" style="border:0;padding:0">小聯盟新秀 · TOP 100</h2>
+        <span class="section-meta">MLB Stats API · 2026 賽季資料</span>
+    </div>
+
+    <div class="hint" style="margin-bottom:12px">
+        <strong>排名邏輯</strong>：各層級內部分別算 z-score（AAA 跟 AAA 比、AA 跟 AA 比 ...），再乘上層級權重做 composite。
+        打者看 <strong>AVG / OBP / OPS / HR / SB</strong>、投手看 <strong>K/9 / BB/9 / ERA / WHIP / FIP</strong>。
+        <br>
+        層級權重：<span class="badge level-AAA">AAA × 1.0</span>
+        <span class="badge level-AA">AA × 0.75</span>
+        <span class="badge level-Ap">A+ × 0.5</span>
+        <span class="badge level-A">A × 0.3</span>
+    </div>
+
+    <div class="tab-row">
+        <button id="tab-bat" class="active">打者 Top {{ hitters|length }}</button>
+        <button id="tab-pit">投手 Top {{ pitchers|length }}</button>
+    </div>
+
+    {# ── Hitters ── #}
+    <div id="panel-bat">
+        {% if hitters %}
+        <div class="tbl-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th><th>球員</th><th>層級</th><th>位置</th><th>隊伍</th>
+                    <th class="num">AVG</th><th class="num">OBP</th><th class="num">OPS</th>
+                    <th class="num">HR</th><th class="num">SB</th>
+                    <th class="num">PA</th>
+                    <th class="num">Z</th><th class="num">Composite</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for p in hitters %}
+            <tr>
+                <td class="num" style="color:var(--red);font-weight:700">{{ loop.index }}</td>
+                <td class="name-cell">
+                    <span class="player-name">{{ p.name }}</span>
+                </td>
+                <td><span class="badge level-{{ p.level|replace('+', 'p') }}">{{ p.level }}</span></td>
+                <td><span class="pos-chip">{{ p.pos or '—' }}</span></td>
+                <td class="player-team">{{ p.team }}</td>
+                <td class="num">{{ "%.3f"|format(p.stats.AVG) if p.stats.AVG is not none else '—' }}</td>
+                <td class="num">{{ "%.3f"|format(p.stats.OBP) if p.stats.OBP is not none else '—' }}</td>
+                <td class="num">{{ "%.3f"|format(p.stats.OPS) if p.stats.OPS is not none else '—' }}</td>
+                <td class="num">{{ p.stats.HR|int if p.stats.HR is not none else '—' }}</td>
+                <td class="num">{{ p.stats.SB|int if p.stats.SB is not none else '—' }}</td>
+                <td class="num" style="color:var(--muted)">{{ p.stats.PA|int if p.stats.PA is not none else '—' }}</td>
+                <td class="num {% if p.z >= 1.5 %}z-pos-2{% elif p.z >= 0.5 %}z-pos-1{% elif p.z >= -0.5 %}z-neu{% elif p.z >= -1.5 %}z-neg-1{% else %}z-neg-2{% endif %}">{{ '%+.2f'|format(p.z) }}</td>
+                <td class="num" style="font-weight:700;color:{% if p.composite >= 1 %}var(--green){% elif p.composite >= 0 %}var(--ink){% else %}var(--muted){% endif %}">{{ '%+.2f'|format(p.composite) }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <div class="empty">沒撈到打者資料（MiLB API 可能暫時無回應）</div>
+        {% endif %}
+    </div>
+
+    {# ── Pitchers ── #}
+    <div id="panel-pit" style="display:none">
+        {% if pitchers %}
+        <div class="tbl-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th><th>球員</th><th>層級</th><th>角色</th><th>隊伍</th>
+                    <th class="num">ERA</th><th class="num">WHIP</th>
+                    <th class="num">K/9</th><th class="num">BB/9</th><th class="num">FIP</th>
+                    <th class="num">IP</th>
+                    <th class="num">Z</th><th class="num">Composite</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for p in pitchers %}
+            <tr>
+                <td class="num" style="color:var(--red);font-weight:700">{{ loop.index }}</td>
+                <td class="name-cell">
+                    <span class="player-name">{{ p.name }}</span>
+                </td>
+                <td><span class="badge level-{{ p.level|replace('+', 'p') }}">{{ p.level }}</span></td>
+                <td><span class="pos-chip">{{ p.pos }}</span></td>
+                <td class="player-team">{{ p.team }}</td>
+                <td class="num">{{ "%.2f"|format(p.stats.ERA) if p.stats.ERA is not none else '—' }}</td>
+                <td class="num">{{ "%.2f"|format(p.stats.WHIP) if p.stats.WHIP is not none else '—' }}</td>
+                <td class="num">{{ "%.2f"|format(p.stats.K9) if p.stats.K9 is not none else '—' }}</td>
+                <td class="num">{{ "%.2f"|format(p.stats.BB9) if p.stats.BB9 is not none else '—' }}</td>
+                <td class="num">{{ "%.2f"|format(p.stats.FIP) if p.stats.FIP is not none else '—' }}</td>
+                <td class="num" style="color:var(--muted)">{{ p.stats.IP|round(1) if p.stats.IP is not none else '—' }}</td>
+                <td class="num {% if p.z >= 1.5 %}z-pos-2{% elif p.z >= 0.5 %}z-pos-1{% elif p.z >= -0.5 %}z-neu{% elif p.z >= -1.5 %}z-neg-1{% else %}z-neg-2{% endif %}">{{ '%+.2f'|format(p.z) }}</td>
+                <td class="num" style="font-weight:700;color:{% if p.composite >= 1 %}var(--green){% elif p.composite >= 0 %}var(--ink){% else %}var(--muted){% endif %}">{{ '%+.2f'|format(p.composite) }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <div class="empty">沒撈到投手資料</div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+(function() {
+    var tabBat = document.getElementById('tab-bat');
+    var tabPit = document.getElementById('tab-pit');
+    var panelBat = document.getElementById('panel-bat');
+    var panelPit = document.getElementById('panel-pit');
+    function show(which) {
+        tabBat.classList.toggle('active', which === 'bat');
+        tabPit.classList.toggle('active', which === 'pit');
+        panelBat.style.display = which === 'bat' ? '' : 'none';
+        panelPit.style.display = which === 'pit' ? '' : 'none';
+    }
+    tabBat.addEventListener('click', function() { show('bat'); });
+    tabPit.addEventListener('click', function() { show('pit'); });
+})();
+</script>
+
+{% endblock %}
