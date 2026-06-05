@@ -321,7 +321,12 @@ def waiver(league_key):
             z_total     = v.get("total")
             cats        = v.get("cats", {})
             analysis    = api.analyze_player(stats, is_batter)
-            eligible    = stats.get("fantasy_eligible") or player_values.default_eligible(is_batter, fa["position"])
+            # Prefer Yahoo's eligible_positions (gold standard for our league
+            # — has the full multi-position list like "OF,SS,2B"). Fall back to
+            # MLB Stats primary-derived eligibility, then to a positional default.
+            eligible    = (fa.get("eligible_positions")
+                           or stats.get("fantasy_eligible")
+                           or player_values.default_eligible(is_batter, fa["position"]))
 
             # Small-sample warning (current season only): hitter PA < 50 or pitcher IP < 10.
             cur_2026 = hit_2026.get(nk, {}) if is_batter else pit_2026.get(nk, {})
