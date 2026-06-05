@@ -15,7 +15,7 @@
 <div class="grid-2">
     {# Batters #}
     <div class="card">
-        <h2>打者 · 5×5 z-score</h2>
+        <h2>打者 · 7×7 z-score</h2>
         <div class="tbl-wrap">
         <table>
             <thead>
@@ -54,7 +54,7 @@
 
     {# Pitchers #}
     <div class="card">
-        <h2>投手 · 5×5 z-score</h2>
+        <h2>投手 · 7×7 z-score</h2>
         <div class="tbl-wrap">
         <table>
             <thead>
@@ -89,7 +89,7 @@
             </tbody>
         </table>
         </div>
-        <div class="hint" style="margin-top:8px">分數為 5×5 z-score 加總，相對 2025 聯盟平均</div>
+        <div class="hint" style="margin-top:8px">分數為 7×7 z-score 加總（2026 × 0.80 + 2025 × 0.20 加權）</div>
     </div>
 </div>
 {% endif %}
@@ -166,7 +166,7 @@
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:10px">
         <div>
             <div style="font-family:var(--font-display);font-size:1.15rem;color:var(--ink)">{{ league.name }}</div>
-            <div class="hint" style="margin-top:2px">{{ league.season }} · {{ league.num_teams }} 隊 · H2H 5×5</div>
+            <div class="hint" style="margin-top:2px">{{ league.season }} · {{ league.num_teams }} 隊 · H2H 7×7</div>
         </div>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:8px">
