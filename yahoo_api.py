@@ -4,7 +4,7 @@ Yahoo Fantasy Sports API wrapper.
 Only the surface area used by the current app:
   - leagues / my team / all teams
   - current matchup (this week's scoreboard)
-  - team roster + merged MLB Stats season stats + 5x5 strength analysis
+  - team roster + merged MLB Stats season stats + 7x7 strength analysis
   - free agents / waivers with eligible_positions + headshot
 """
 import os
@@ -74,6 +74,20 @@ def parse_player_info(info_list):
         if isinstance(item, dict):
             merged.update(item)
     return merged
+
+
+PITCHER_TOKENS = {"SP", "RP", "P"}
+
+
+def is_batter_position(display_pos):
+    """Classify a Yahoo `display_position` string as batter vs pitcher.
+    Yahoo returns compound positions like "SP,RP" or "1B,3B" — naive string
+    equality (e.g. `display_pos not in ("SP","RP","P")`) misses these and
+    mislabels two-way-eligible pitchers as batters."""
+    if not display_pos:
+        return True
+    tokens = [t.strip() for t in display_pos.split(",") if t.strip()]
+    return not any(t in PITCHER_TOKENS for t in tokens)
 
 
 # ── User & Leagues ─────────────────────────────────────────────
@@ -204,7 +218,7 @@ def get_team_roster_with_stats(team_key):
             p = players_data[str(i)]["player"]
             info = parse_player_info(p[0])
             display_pos = info.get("display_position", "")
-            is_batter   = display_pos not in ("SP", "RP", "P")
+            is_batter   = is_batter_position(display_pos)
             full_name   = info.get("name", {}).get("full", "")
             norm_name   = mlb_stats._normalize(full_name)
             stats       = hitting.get(norm_name, {}) if is_batter else pitching.get(norm_name, {})
@@ -272,7 +286,7 @@ def get_free_agents(league_key, position="B", count=50):
     return result[:count]
 
 
-# ── Strength / Weakness Analysis (5x5) ─────────────────────────
+# ── Strength / Weakness Analysis (7x7) ─────────────────────────
 
 def analyze_player(stats, is_batter):
     """Return strengths/weaknesses tuned for league 7x7 cats.

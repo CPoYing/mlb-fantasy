@@ -264,8 +264,9 @@ def waiver(league_key):
         enriched = []
         for fa in fa_pool:
             nk          = norm(fa["name"])
-            # Yahoo display_position is the source of truth for FA classification
-            is_batter   = fa["position"] not in ("SP", "RP", "P")
+            # Yahoo display_position is the source of truth for FA classification.
+            # Use the helper so compound positions like "SP,RP" classify correctly.
+            is_batter   = api.is_batter_position(fa["position"])
             src         = bv if is_batter else pv
             v           = src.get(nk, {})
             stats       = v.get("stats") or (hitting.get(nk, {}) if is_batter else pitching.get(nk, {}))

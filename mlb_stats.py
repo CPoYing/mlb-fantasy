@@ -80,20 +80,32 @@ def _div(num, den):
     return num / den
 
 
+PITCHER_ABBRS = {"P", "SP", "RP"}
+
+
 def get_hitting_stats_by_name(season=2025):
-    """Return {norm_name: stat_dict} for hitters with ≥5 G in the season.
-    Stat dict carries both 5x5 categories and advanced derived metrics
+    """Return {norm_name: stat_dict} for hitters with meaningful playing time.
+    Stat dict carries both 7x7 categories and advanced derived metrics
     (ISO, BB%, K%, BABIP, SLG).
+
+    Filters defensively: MLB Stats API's hitting endpoint also returns
+    pitchers (with the pitcher's gamesPlayed = his pitching appearances
+    but 0 PA), so without a PA gate those guys leak into the batter pool
+    and end up scored against batter norms. We additionally exclude any
+    player whose primary listed position is a pitcher slot.
     """
     splits = _fetch_all("hitting", season)
     result = {}
     for split in splits:
         name  = split.get("player", {}).get("fullName", "")
         s     = split.get("stat", {})
-        games = s.get("gamesPlayed", 0) or 0
-        if games < 5:
-            continue
         mlb_abbr = split.get("position", {}).get("abbreviation", "")
+        if mlb_abbr in PITCHER_ABBRS:
+            continue
+        games = s.get("gamesPlayed", 0) or 0
+        pa_raw = s.get("plateAppearances", 0) or 0
+        if games < 5 or pa_raw < 20:
+            continue
 
         avg = _f(s.get("avg"))
         slg = _f(s.get("slg"))
@@ -139,7 +151,7 @@ def get_hitting_stats_by_name(season=2025):
 
 def get_pitching_stats_by_name(season=2025):
     """Return {norm_name: stat_dict} for pitchers with ≥2 IP in the season.
-    Adds K/9, BB/9, K-BB%, FIP, BABIP on top of 5x5.
+    Adds K/9, BB/9, K-BB%, FIP, BABIP on top of 7x7.
     """
     splits = _fetch_all("pitching", season)
     result = {}

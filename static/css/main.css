@@ -253,7 +253,7 @@ tbody tr:nth-child(even) td { background: var(--paper-deep); }
 tbody tr:hover td { background: rgba(212, 160, 23, 0.08); }
 .num { font-family: var(--font-mono); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-/* ── Badges (5x5 strengths, position chips, status) ── */
+/* ── Badges (7x7 strengths, position chips, status) ── */
 .badge {
     display: inline-block;
     font-family: var(--font-display);
