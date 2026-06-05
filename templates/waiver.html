@@ -22,7 +22,7 @@
     </div>
 
     <div class="hint" style="margin-bottom:14px">
-        <strong>Upgrade z 分</strong> = 該球員 z 總分 − 你陣中相同位置「最弱者」z 總分；越高代表替換進來能拉抬越多。標 🔥 為近 7 日表現火熱。
+        <strong>Upgrade z 分</strong> = 該球員 7×7 z 總分 − 你陣中相同位置「最弱者」z 總分；越高代表替換進來能拉抬越多。z 加權：<strong>2026 × 0.80 + 2025 × 0.20</strong>。標 🔥 為近 7 日表現火熱。
     </div>
 
     {# ── Top recommendations (best 3 by upgrade) ── #}
@@ -53,6 +53,20 @@
             </div>
             <div style="margin-top:8px;font-size:0.8rem;color:var(--muted)">
                 {% if p.upgrade_over %}替換 <span style="color:var(--ink)">{{ p.upgrade_over }}</span>{% endif %}
+            </div>
+            <div class="num" style="margin-top:6px;font-size:0.75rem;color:var(--muted)">
+                {% if p.is_batter %}
+                    {% if p.stats.get('AVG') is not none %}AVG {{ "%.3f"|format(p.stats.AVG) }}{% endif %}
+                    {% if p.stats.get('OBP') is not none %} · OBP {{ "%.3f"|format(p.stats.OBP) }}{% endif %}
+                    {% if p.stats.get('OPS') is not none %} · OPS {{ "%.3f"|format(p.stats.OPS) }}{% endif %}
+                    {% if p.stats.get('HR') is not none %} · {{ p.stats.HR|int }}HR{% endif %}
+                    {% if p.stats.get('ISO') is not none %} · ISO {{ "%.3f"|format(p.stats.ISO) }}{% endif %}
+                {% else %}
+                    {% if p.stats.get('ERA') is not none %}ERA {{ "%.2f"|format(p.stats.ERA) }}{% endif %}
+                    {% if p.stats.get('WHIP') is not none %} · WHIP {{ "%.2f"|format(p.stats.WHIP) }}{% endif %}
+                    {% if p.stats.get('K9') is not none %} · K/9 {{ "%.2f"|format(p.stats.K9) }}{% endif %}
+                    {% if p.stats.get('FIP') is not none %} · FIP {{ "%.2f"|format(p.stats.FIP) }}{% endif %}
+                {% endif %}
             </div>
             {% if p.analysis.strengths %}
             <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px">

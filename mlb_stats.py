@@ -71,7 +71,20 @@ def mlb_pos_to_fantasy(mlb_abbr, is_starter=None):
     return _POS_MAP.get(mlb_abbr, ["Util"])
 
 
+FIP_CONSTANT = 3.10   # approximate; ~ league-avg FIP adjuster (varies by season ~3.0–3.2)
+
+
+def _div(num, den):
+    if num is None or den is None or den == 0:
+        return None
+    return num / den
+
+
 def get_hitting_stats_by_name(season=2025):
+    """Return {norm_name: stat_dict} for hitters with ≥5 G in the season.
+    Stat dict carries both 5x5 categories and advanced derived metrics
+    (ISO, BB%, K%, BABIP, SLG).
+    """
     splits = _fetch_all("hitting", season)
     result = {}
     for split in splits:
@@ -81,22 +94,53 @@ def get_hitting_stats_by_name(season=2025):
         if games < 5:
             continue
         mlb_abbr = split.get("position", {}).get("abbreviation", "")
+
+        avg = _f(s.get("avg"))
+        slg = _f(s.get("slg"))
+        obp = _f(s.get("obp"))
+        ops = _f(s.get("ops"))
+        bb  = _f(s.get("baseOnBalls"))
+        k   = _f(s.get("strikeOuts"))
+        pa  = _f(s.get("plateAppearances"))
+        babip = _f(s.get("babip"))
+
+        iso = (slg - avg) if (slg is not None and avg is not None) else None
+        bb_pct = _div(bb, pa)
+        k_pct  = _div(k,  pa)
+
         result[_normalize(name)] = {
-            "AVG":     _f(s.get("avg")),
+            # League categories (7x7)
             "HR":      _f(s.get("homeRuns")),
             "RBI":     _f(s.get("rbi")),
-            "R":       _f(s.get("runs")),
             "SB":      _f(s.get("stolenBases")),
-            "OBP":     _f(s.get("obp")),
-            "OPS":     _f(s.get("ops")),
+            "AVG":     avg,
+            "OBP":     obp,
+            "OPS":     ops,
+            "E":       _f(s.get("errors")),
+            # Reference
+            "R":       _f(s.get("runs")),
+            "SLG":     slg,
+            # Advanced (Savant / FanGraphs style)
+            "ISO":     round(iso, 3) if iso is not None else None,
+            "BB_pct":  round(bb_pct, 3) if bb_pct is not None else None,
+            "K_pct":   round(k_pct,  3) if k_pct  is not None else None,
+            "BABIP":   babip,
+            # Volume
+            "PA":      pa,
+            "BB":      bb,
+            "K":       k,
             "G":       float(games),
-            "mlb_pos": mlb_abbr,                        # e.g. "3B", "CF", "C"
+            # Position
+            "mlb_pos": mlb_abbr,
             "fantasy_eligible": mlb_pos_to_fantasy(mlb_abbr),
         }
     return result
 
 
 def get_pitching_stats_by_name(season=2025):
+    """Return {norm_name: stat_dict} for pitchers with ≥2 IP in the season.
+    Adds K/9, BB/9, K-BB%, FIP, BABIP on top of 5x5.
+    """
     splits = _fetch_all("pitching", season)
     result = {}
     for split in splits:
@@ -109,15 +153,42 @@ def get_pitching_stats_by_name(season=2025):
         started = s.get("gamesStarted", 0) or 0
         is_sp   = (started / games) >= 0.5 if games > 0 else False
         eligible = ["SP", "P"] if is_sp else ["RP", "P"]
+
+        k    = _f(s.get("strikeOuts"))
+        bb   = _f(s.get("baseOnBalls"))
+        hr   = _f(s.get("homeRuns"))
+        bf   = _f(s.get("battersFaced"))
+        era  = _f(s.get("era"))
+        whip = _f(s.get("whip"))
+        babip = _f(s.get("babip"))
+
+        k9    = _div((k  or 0) * 9, ip)
+        bb9   = _div((bb or 0) * 9, ip)
+        k_bb  = _div((k or 0) - (bb or 0), bf) if bf else None
+        fip   = ((13 * (hr or 0) + 3 * (bb or 0) - 2 * (k or 0)) / ip + FIP_CONSTANT) if ip else None
+
         result[_normalize(name)] = {
-            "ERA":      _f(s.get("era")),
-            "WHIP":     _f(s.get("whip")),
-            "K":        _f(s.get("strikeOuts")),
+            # League categories (7x7)
             "W":        _f(s.get("wins")),
+            "BB":       bb,
+            "HLD":      _f(s.get("holds")),
             "SV":       _f(s.get("saves")),
+            "K":        k,
+            "ERA":      era,
+            "WHIP":     whip,
+            # Advanced (Savant / FanGraphs style)
+            "K9":       round(k9,   2) if k9   is not None else None,
+            "BB9":      round(bb9,  2) if bb9  is not None else None,
+            "K_BB_pct": round(k_bb, 3) if k_bb is not None else None,
+            "FIP":      round(fip,  2) if fip  is not None else None,
+            "BABIP":    babip,
+            # Volume
             "IP":       ip,
+            "BF":       bf,
+            "HR":       hr,
             "GS":       float(started),
             "G":        float(games),
+            # Position
             "mlb_pos":  "SP" if is_sp else "RP",
             "fantasy_eligible": eligible,
         }
@@ -153,9 +224,17 @@ def _apply_positions(stats_dict, positions):
     return stats_dict
 
 
+_merged_hitting_cache  = {}
+_merged_pitching_cache = {}
+
+
 def get_hitting_stats_merged(current=2026, fallback=2025):
     """Prefer current-season stats (≥5 games), fall back to previous season.
-    Always uses current-season positions regardless of game count."""
+    Always uses current-season positions regardless of game count.
+    Memoized per (current, fallback) pair."""
+    key = (current, fallback)
+    if key in _merged_hitting_cache:
+        return _merged_hitting_cache[key]
     cur  = get_hitting_stats_by_name(current)
     prev = get_hitting_stats_by_name(fallback)
     result = {k: dict(v) for k, v in prev.items()}
@@ -163,12 +242,17 @@ def get_hitting_stats_merged(current=2026, fallback=2025):
         if (s.get("G") or 0) >= 5:
             result[name] = dict(s)
     _apply_positions(result, get_player_positions(current))
+    _merged_hitting_cache[key] = result
     return result
 
 
 def get_pitching_stats_merged(current=2026, fallback=2025):
     """Prefer current-season stats (≥2 IP), fall back to previous season.
-    Always uses current-season positions regardless of IP."""
+    Always uses current-season positions regardless of IP.
+    Memoized per (current, fallback) pair."""
+    key = (current, fallback)
+    if key in _merged_pitching_cache:
+        return _merged_pitching_cache[key]
     cur  = get_pitching_stats_by_name(current)
     prev = get_pitching_stats_by_name(fallback)
     result = {k: dict(v) for k, v in prev.items()}
@@ -176,14 +260,23 @@ def get_pitching_stats_merged(current=2026, fallback=2025):
         if (s.get("IP") or 0) >= 2:
             result[name] = dict(s)
     _apply_positions(result, get_player_positions(current))
+    _merged_pitching_cache[key] = result
     return result
+
+
+_hot_cache = {}
 
 
 def get_hot_players(days=7, season=2026, limit=8):
     """Fetch hottest hitters and pitchers from last X days.
-    Falls back to 2025 season top performers if pre-season / no data."""
+    Falls back to 2025 season top performers if pre-season / no data.
+    Cached per (date, days, season, limit) so multiple page loads in the
+    same day reuse the result."""
     from datetime import date, timedelta
     end = date.today()
+    cache_key = (end.isoformat(), days, season, limit)
+    if cache_key in _hot_cache:
+        return _hot_cache[cache_key]
     start = end - timedelta(days=days)
     start_str = start.strftime("%m/%d/%Y")
     end_str   = end.strftime("%m/%d/%Y")
@@ -264,11 +357,13 @@ def get_hot_players(days=7, season=2026, limit=8):
         })
     pitchers.sort(key=lambda x: x["score"], reverse=True)
 
-    return {
+    result = {
         "hitters": hitters[:limit],
         "pitchers": pitchers[:limit],
         "source": source,
     }
+    _hot_cache[cache_key] = result
+    return result
 
 
 def _f(val):

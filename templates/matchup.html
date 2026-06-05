@@ -16,11 +16,21 @@
         </div>
         <div class="num" style="font-size:0.78rem;color:var(--muted);margin-top:4px">
             {% if p.stats.get('AVG') is not none %}AVG {{ "%.3f"|format(p.stats.AVG) }}{% endif %}
+            {% if p.stats.get('OBP') is not none %} · OBP {{ "%.3f"|format(p.stats.OBP) }}{% endif %}
+            {% if p.stats.get('OPS') is not none %} · OPS {{ "%.3f"|format(p.stats.OPS) }}{% endif %}
             {% if p.stats.get('HR') is not none %} · {{ p.stats.HR|int }}HR{% endif %}
             {% if p.stats.get('RBI') is not none %} · {{ p.stats.RBI|int }}RBI{% endif %}
-            {% if p.stats.get('R') is not none %} · {{ p.stats.R|int }}R{% endif %}
             {% if p.stats.get('SB') is not none %} · {{ p.stats.SB|int }}SB{% endif %}
+            {% if p.stats.get('E') is not none %} · {{ p.stats.E|int }}E{% endif %}
         </div>
+        {% if p.stats.get('ISO') is not none or p.stats.get('BB_pct') is not none %}
+        <div class="num" style="font-size:0.72rem;color:var(--muted);margin-top:2px">
+            {% if p.stats.get('ISO') is not none %}ISO {{ "%.3f"|format(p.stats.ISO) }}{% endif %}
+            {% if p.stats.get('BB_pct') is not none %} · BB% {{ "%.1f"|format(p.stats.BB_pct*100) }}{% endif %}
+            {% if p.stats.get('K_pct') is not none %} · K% {{ "%.1f"|format(p.stats.K_pct*100) }}{% endif %}
+            {% if p.stats.get('BABIP') is not none %} · BABIP {{ "%.3f"|format(p.stats.BABIP) }}{% endif %}
+        </div>
+        {% endif %}
         {% if p.analysis.strengths or p.analysis.weaknesses %}
         <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px">
             {% for s in p.analysis.strengths %}<span class="badge badge-green">{{ s }}</span>{% endfor %}
@@ -47,9 +57,19 @@
             {% if p.stats.get('ERA') is not none %}ERA {{ "%.2f"|format(p.stats.ERA) }}{% endif %}
             {% if p.stats.get('WHIP') is not none %} · WHIP {{ "%.2f"|format(p.stats.WHIP) }}{% endif %}
             {% if p.stats.get('K') is not none %} · {{ p.stats.K|int }}K{% endif %}
+            {% if p.stats.get('BB') is not none %} · {{ p.stats.BB|int }}BB{% endif %}
             {% if p.stats.get('W') is not none %} · {{ p.stats.W|int }}W{% endif %}
+            {% if p.stats.get('HLD') is not none and p.stats.HLD > 0 %} · {{ p.stats.HLD|int }}HLD{% endif %}
             {% if p.stats.get('SV') is not none and p.stats.SV > 0 %} · {{ p.stats.SV|int }}SV{% endif %}
         </div>
+        {% if p.stats.get('K9') is not none or p.stats.get('FIP') is not none %}
+        <div class="num" style="font-size:0.72rem;color:var(--muted);margin-top:2px">
+            {% if p.stats.get('K9') is not none %}K/9 {{ "%.2f"|format(p.stats.K9) }}{% endif %}
+            {% if p.stats.get('BB9') is not none %} · BB/9 {{ "%.2f"|format(p.stats.BB9) }}{% endif %}
+            {% if p.stats.get('FIP') is not none %} · FIP {{ "%.2f"|format(p.stats.FIP) }}{% endif %}
+            {% if p.stats.get('BABIP') is not none %} · BABIP {{ "%.3f"|format(p.stats.BABIP) }}{% endif %}
+        </div>
+        {% endif %}
         {% if p.analysis.strengths or p.analysis.weaknesses %}
         <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px">
             {% for s in p.analysis.strengths %}<span class="badge badge-green">{{ s }}</span>{% endfor %}

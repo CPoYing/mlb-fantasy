@@ -18,23 +18,43 @@
 }
 .pos-tab:hover { background: var(--paper-deep); }
 .pos-tab.active { background: var(--red); color: var(--paper); border-color: var(--red); }
+.adv-toggle {
+    margin-left: auto;
+    padding: 6px 14px;
+    border: 1px solid var(--line-strong);
+    background: var(--card);
+    color: var(--ink);
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-family: var(--font-display);
+    font-size: 0.78rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+.adv-toggle.active { background: var(--gold); border-color: var(--gold); color: var(--ink); }
 #rnk-table th { cursor: pointer; user-select: none; }
 #rnk-table th.sorted-asc::after  { content: " ▲"; color: var(--gold); }
 #rnk-table th.sorted-desc::after { content: " ▼"; color: var(--gold); }
 .name-cell { text-align: left !important; max-width: 220px; }
+.source-tag {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    color: var(--muted);
+    margin-left: 4px;
+}
 </style>
 
 <div id="loadingOverlay" class="loading-overlay">
     <div class="loading-box">
         <div class="spinner"></div>
         <div>正在載入全聯盟球員排名...</div>
-        <div class="hint" style="margin-top:6px">首次載入約需 15–25 秒（要抓 ~1500 位球員的整季數據）</div>
+        <div class="hint" style="margin-top:6px">首次載入約需 15–25 秒（要抓 ~1500 位球員的 2025+2026 數據）</div>
     </div>
 </div>
 
 <div class="card">
     <div class="section-title-row">
-        <h2 class="section-title" style="border:0;padding:0">球員排名 · 5×5 Z-score</h2>
+        <h2 class="section-title" style="border:0;padding:0">球員排名 · 7×7 Z-score</h2>
         <span class="section-meta" id="rnk-count"></span>
     </div>
 
@@ -48,6 +68,12 @@
         <button class="pos-tab" data-pos="OF">OF</button>
         <button class="pos-tab" data-pos="SP">SP</button>
         <button class="pos-tab" data-pos="RP">RP</button>
+        <button class="adv-toggle" id="advToggle" title="顯示 FanGraphs / Savant 風格進階指標">進階</button>
+    </div>
+
+    <div class="hint" style="margin-bottom:8px">
+        Z 分採 <strong>2026 × 0.80 + 2025 × 0.20</strong> 加權；標籤
+        <span class="source-tag">26</span> 純當季、<span class="source-tag">25</span> 純去年（傷兵/未出賽）、<span class="source-tag">26+25</span> 混合。
     </div>
 
     <div class="tbl-wrap" id="rnk-wrap" style="display:none">
@@ -59,14 +85,29 @@
 </div>
 
 <script>
-const BATTING_CATS  = ['R','HR','RBI','SB','AVG'];
-const PITCHING_CATS = ['W','SV','K','ERA','WHIP'];
-const PITCHER_POS   = new Set(['SP','RP']);
+const BATTING_CATS  = ['HR','RBI','SB','AVG','OBP','OPS','E'];
+const PITCHING_CATS = ['W','BB','HLD','SV','K','ERA','WHIP'];
+const BATTING_ADV   = ['ISO','BB_pct','K_pct','BABIP','SLG'];
+const PITCHING_ADV  = ['K9','BB9','FIP','K_BB_pct','BABIP'];
+const ADV_LABEL = { BB_pct:'BB%', K_pct:'K%', K_BB_pct:'K-BB%' };
+const ADV_FMT = {
+    ISO:    v => v.toFixed(3),
+    SLG:    v => v.toFixed(3),
+    BABIP:  v => v.toFixed(3),
+    BB_pct: v => (v * 100).toFixed(1) + '%',
+    K_pct:  v => (v * 100).toFixed(1) + '%',
+    K9:     v => v.toFixed(2),
+    BB9:    v => v.toFixed(2),
+    FIP:    v => v.toFixed(2),
+    K_BB_pct: v => (v * 100).toFixed(1) + '%',
+};
+const PITCHER_POS = new Set(['SP','RP']);
 
 let allPlayers = [];
 let currentPos = 'ALL';
 let sortCol    = 'rank';
 let sortAsc    = true;
+let showAdv    = false;
 
 async function loadData() {
     try {
@@ -102,14 +143,15 @@ function sortList(list) {
 function colVal(p, col) {
     if (col === 'rank')    return p.rank;
     if (col === 'z_score') return p.z_score;
-    const z = p.cats[col];
-    return (z !== undefined && z !== null) ? z : null;
+    if (p.cats[col] !== undefined && p.cats[col] !== null) return p.cats[col];
+    if (p.adv && p.adv[col] !== undefined && p.adv[col] !== null) return p.adv[col];
+    return null;
 }
 
 function getCols(pos) {
-    if (PITCHER_POS.has(pos)) return { bat: [], pit: PITCHING_CATS };
-    if (pos === 'ALL')        return { bat: BATTING_CATS, pit: PITCHING_CATS };
-    return { bat: BATTING_CATS, pit: [] };
+    if (PITCHER_POS.has(pos)) return { bat: [], pit: PITCHING_CATS, batAdv: [], pitAdv: PITCHING_ADV };
+    if (pos === 'ALL')        return { bat: BATTING_CATS, pit: PITCHING_CATS, batAdv: BATTING_ADV, pitAdv: PITCHING_ADV };
+    return { bat: BATTING_CATS, pit: [], batAdv: BATTING_ADV, pitAdv: [] };
 }
 
 function zClass(z) {
@@ -122,6 +164,11 @@ function zClass(z) {
 }
 function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function sourceLabel(src) {
+    if (src === '2026') return '26';
+    if (src === '2025') return '25';
+    return '26+25';
 }
 
 function render() {
@@ -139,7 +186,10 @@ function render() {
         { key: 'z_score', label: 'Z 總' },
     ];
     const catCols = [...cols.bat, ...cols.pit].map(c => ({ key: c, label: c }));
-    const allCols = [...fixedCols, ...catCols];
+    const advCols = showAdv
+        ? [...cols.batAdv, ...cols.pitAdv].map(c => ({ key: c, label: ADV_LABEL[c] || c }))
+        : [];
+    const allCols = [...fixedCols, ...catCols, ...advCols];
 
     const headRow = document.getElementById('rnk-thead-row');
     headRow.innerHTML = allCols.map(c => {
@@ -172,12 +222,23 @@ function render() {
             return `<td class="num ${zClass(z)}">${z.toFixed(2)}</td>`;
         }).join('');
 
+        const advCells = showAdv ? [...cols.batAdv, ...cols.pitAdv].map(k => {
+            const v = (p.adv || {})[k];
+            if (v === undefined || v === null) return '<td class="num z-neu">—</td>';
+            const fmt = ADV_FMT[k] || (x => String(x));
+            return `<td class="num">${fmt(v)}</td>`;
+        }).join('') : '';
+
         return `<tr>
             <td class="num" style="color:var(--red);font-weight:700">${localRank}</td>
-            <td class="name-cell"><span class="player-name">${esc(p.name)}</span></td>
+            <td class="name-cell">
+                <span class="player-name">${esc(p.name)}</span>
+                <span class="source-tag">${sourceLabel(p.source)}</span>
+            </td>
             <td><div class="pos-chips">${ep}</div></td>
             <td class="num ${zClass(p.z_score)}">${p.z_score.toFixed(2)}</td>
             ${catCells}
+            ${advCells}
         </tr>`;
     }).join('');
 }
@@ -190,6 +251,11 @@ document.getElementById('pos-tabs').addEventListener('click', e => {
     currentPos = btn.dataset.pos;
     sortCol = 'rank';
     sortAsc = true;
+    render();
+});
+document.getElementById('advToggle').addEventListener('click', e => {
+    showAdv = !showAdv;
+    e.currentTarget.classList.toggle('active', showAdv);
     render();
 });
 
