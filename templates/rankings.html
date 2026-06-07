@@ -92,19 +92,25 @@
 <script>
 const BATTING_CATS  = ['HR','RBI','SB','AVG','OBP','OPS','E'];
 const PITCHING_CATS = ['W','BB','HLD','SV','K','ERA','WHIP'];
-const BATTING_ADV   = ['ISO','BB_pct','K_pct','BABIP','SLG'];
-const PITCHING_ADV  = ['K9','BB9','FIP','K_BB_pct','BABIP'];
-const ADV_LABEL = { BB_pct:'BB%', K_pct:'K%', K_BB_pct:'K-BB%' };
+const BATTING_ADV   = ['ISO','BB_pct','K_pct','BABIP','SLG','xAVG','xSLG','xwOBA'];
+const PITCHING_ADV  = ['K9','BB9','FIP','K_BB_pct','BABIP','xAVG','xSLG','xwOBA'];
+const ADV_LABEL = {
+    BB_pct: 'BB%', K_pct: 'K%', K_BB_pct: 'K-BB%',
+    xAVG: 'xAVG', xSLG: 'xSLG', xwOBA: 'xwOBA',
+};
 const ADV_FMT = {
-    ISO:    v => v.toFixed(3),
-    SLG:    v => v.toFixed(3),
-    BABIP:  v => v.toFixed(3),
-    BB_pct: v => (v * 100).toFixed(1) + '%',
-    K_pct:  v => (v * 100).toFixed(1) + '%',
-    K9:     v => v.toFixed(2),
-    BB9:    v => v.toFixed(2),
-    FIP:    v => v.toFixed(2),
+    ISO:      v => v.toFixed(3),
+    SLG:      v => v.toFixed(3),
+    BABIP:    v => v.toFixed(3),
+    BB_pct:   v => (v * 100).toFixed(1) + '%',
+    K_pct:    v => (v * 100).toFixed(1) + '%',
+    K9:       v => v.toFixed(2),
+    BB9:      v => v.toFixed(2),
+    FIP:      v => v.toFixed(2),
     K_BB_pct: v => (v * 100).toFixed(1) + '%',
+    xAVG:     v => v.toFixed(3),
+    xSLG:     v => v.toFixed(3),
+    xwOBA:    v => v.toFixed(3),
 };
 const PITCHER_POS = new Set(['SP','RP']);
 
@@ -239,10 +245,13 @@ function render() {
 
         const tierBadge = p.tier === 'closer' ? ' <span class="badge badge-gold">CL</span>' :
                           p.tier === 'setup'  ? ' <span class="badge badge-green">SU</span>' : '';
+        const nameCell = p.player_id
+            ? `<a href="/player/${p.player_id}" class="player-name" style="color:var(--ink);text-decoration:underline;text-decoration-style:dotted;text-decoration-color:var(--line)">${esc(p.name)}</a>`
+            : `<span class="player-name">${esc(p.name)}</span>`;
         return `<tr>
             <td class="num" style="color:var(--red);font-weight:700">${localRank}</td>
             <td class="name-cell">
-                <span class="player-name">${esc(p.name)}</span>${tierBadge}
+                ${nameCell}${tierBadge}
                 <span class="source-tag">${sourceLabel(p.source)}</span>
             </td>
             <td><div class="pos-chips">${ep}</div></td>

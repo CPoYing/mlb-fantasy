@@ -226,6 +226,14 @@ def matchup(league_key):
         my_cats  = {**_roster_cat_totals(my_bat),  **_roster_cat_totals(my_pit)}
         opp_cats = {**_roster_cat_totals(opp_bat), **_roster_cat_totals(opp_pit)}
 
+        # Real Yahoo-side weekly accumulated stats for the selected week.
+        # Lets the matchup page show "you have 5 HR, opp has 3 HR" rather
+        # than purely z-score estimates.
+        settings = api.get_league_settings(league_key)
+        week_no  = scoreboard.get("week")
+        real_my  = api.get_team_week_stats(my_team["team_key"], week_no, settings["cat_by_id"]) if week_no else {}
+        real_opp = api.get_team_week_stats(opp_key, week_no, settings["cat_by_id"]) if (week_no and opp_key) else {}
+
         return render_template(
             "matchup.html",
             league_key=league_key,
@@ -243,6 +251,9 @@ def matchup(league_key):
             opp_pitchers=opp_pit,
             my_cats=my_cats,
             opp_cats=opp_cats,
+            real_my=real_my,
+            real_opp=real_opp,
+            league_settings=settings,
             batting_cats=BATTING_CATS,
             pitching_cats=PITCHING_CATS,
             active_page="matchup",
@@ -418,6 +429,11 @@ def api_rankings(league_key):
         return jsonify({"error": "not authenticated"}), 401
     try:
         bv, pv = player_values.compute_player_values()
+        # Statcast x-stats (xAVG, xSLG, xwOBA) — for batters, these
+        # are their own expected outcomes; for pitchers, they're batter
+        # outcomes against, so lower = better.
+        x_hit = mlb_stats.get_expected_stats(2026, "hitting")
+        x_pit = mlb_stats.get_expected_stats(2026, "pitching")
 
         def _row(name_key, val):
             stats   = val["stats"]
@@ -426,13 +442,15 @@ def api_rankings(league_key):
                 val["is_batter"], mlb_pos
             )
             primary = mlb_pos or ("SP" if not val["is_batter"] else "OF")
-            # Filter advanced stats to display only the meaningful ones
             adv_keys = (["ISO", "BB_pct", "K_pct", "BABIP", "SLG"]
                         if val["is_batter"]
                         else ["K9", "BB9", "FIP", "K_BB_pct", "BABIP"])
             adv = {k: stats.get(k) for k in adv_keys}
+            x_src = x_hit if val["is_batter"] else x_pit
+            adv.update(x_src.get(name_key, {}))
             return {
-                "name":               name_key.title(),
+                "name":               stats.get("name", name_key.title()),
+                "player_id":          stats.get("player_id"),
                 "position":           primary,
                 "eligible_positions": eligible,
                 "z_score":            round(val["total"], 2),
@@ -457,6 +475,42 @@ def api_rankings(league_key):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/player/<int:player_id>")
+def player_detail(player_id):
+    """Per-player detail page: bio, season summary, last 10 game log."""
+    if "access_token" not in session:
+        return redirect(url_for("login"))
+    try:
+        info = mlb_stats.get_player_info(player_id)
+        is_pitcher = info.get("primary_pos") in ("P", "SP", "RP", "TWP")
+        # TWP shows both sides; for v1 default to whichever has data
+        group = "pitching" if is_pitcher else "hitting"
+        game_log = mlb_stats.get_player_game_log(player_id, season=2026, group=group, limit=10)
+        game_log_prev = mlb_stats.get_player_game_log(player_id, season=2025, group=group, limit=5)
+
+        # Look up the player in player_values for cats / z if we have them
+        bv, pv = player_values.compute_player_values()
+        norm   = mlb_stats._normalize
+        nk     = norm(info.get("name", ""))
+        val    = (pv if is_pitcher else bv).get(nk, {})
+
+        leagues    = api.get_user_leagues()
+        league_key = leagues[0]["league_key"] if leagues else None
+        return render_template(
+            "player.html",
+            info=info,
+            is_pitcher=is_pitcher,
+            game_log=game_log,
+            game_log_prev=game_log_prev,
+            val=val,
+            league_key=league_key,
+            active_page="player",
+        )
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return render_template("error.html", error=str(e))
+
+
 @app.route("/prospects")
 def prospects():
     """Top 100 minor-league prospects ranked by level-weighted composite z."""
@@ -464,8 +518,15 @@ def prospects():
         return redirect(url_for("login"))
     try:
         data = player_values.compute_prospect_rankings(top_n=100)
-        # Pull the user's first league so the nav can keep showing the
-        # league-specific links (matchup/rankings/waiver/schedule).
+        # Recently-called-up players — mark with 🆙 chip so the user
+        # knows to watch them on the MLB side (they may not yet have
+        # enough MLB sample to be filtered out of the prospects list).
+        callup_names = mlb_stats.get_recent_callups(days=14)
+        norm = mlb_stats._normalize
+        for group in (data["hitters"], data["pitchers"]):
+            for p in group:
+                p["is_callup"] = norm(p["name"]) in callup_names
+
         leagues    = api.get_user_leagues()
         league_key = leagues[0]["league_key"] if leagues else None
         return render_template(
