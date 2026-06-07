@@ -226,6 +226,14 @@ def matchup(league_key):
         my_cats  = {**_roster_cat_totals(my_bat),  **_roster_cat_totals(my_pit)}
         opp_cats = {**_roster_cat_totals(opp_bat), **_roster_cat_totals(opp_pit)}
 
+        # Real Yahoo-side weekly accumulated stats for the selected week.
+        # Lets the matchup page show "you have 5 HR, opp has 3 HR" rather
+        # than purely z-score estimates.
+        settings = api.get_league_settings(league_key)
+        week_no  = scoreboard.get("week")
+        real_my  = api.get_team_week_stats(my_team["team_key"], week_no, settings["cat_by_id"]) if week_no else {}
+        real_opp = api.get_team_week_stats(opp_key, week_no, settings["cat_by_id"]) if (week_no and opp_key) else {}
+
         return render_template(
             "matchup.html",
             league_key=league_key,
@@ -243,6 +251,9 @@ def matchup(league_key):
             opp_pitchers=opp_pit,
             my_cats=my_cats,
             opp_cats=opp_cats,
+            real_my=real_my,
+            real_opp=real_opp,
+            league_settings=settings,
             batting_cats=BATTING_CATS,
             pitching_cats=PITCHING_CATS,
             active_page="matchup",

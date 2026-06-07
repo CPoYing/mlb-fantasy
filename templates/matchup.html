@@ -203,34 +203,65 @@
     </div>
 
     {% if opp_key %}
-    {# Per-category z-total comparison #}
-    <div class="tbl-wrap" style="margin-bottom:16px">
+    {# Per-category comparison: actual week-to-date numbers + z forecast #}
+    {% set lower_better = ['E','BB','ERA','WHIP'] %}
+    <div class="tbl-wrap" style="margin-bottom:8px">
     <table>
         <thead>
             <tr>
-                <th style="text-align:right">我方 z 加總</th>
+                <th style="text-align:right" colspan="2">我方</th>
                 <th style="text-align:center">7×7 項目</th>
-                <th style="text-align:left">對方 z 加總</th>
+                <th style="text-align:left" colspan="2">對方</th>
+            </tr>
+            <tr style="font-size:0.7rem;color:var(--muted)">
+                <th style="text-align:right">本週實績</th>
+                <th style="text-align:right">z 估算</th>
+                <th></th>
+                <th style="text-align:left">z 估算</th>
+                <th style="text-align:left">本週實績</th>
             </tr>
         </thead>
         <tbody>
         {% for cat in batting_cats + pitching_cats %}
         {% set mz = my_cats.get(cat, 0) %}
         {% set oz = opp_cats.get(cat, 0) %}
+        {% set mr = real_my.get(cat) %}
+        {% set orr = real_opp.get(cat) %}
+        {# Winner logic — for lower-better cats, smaller = win #}
+        {% if cat in lower_better %}
+            {% set real_my_wins = (mr is not none and orr is not none and mr < orr) %}
+            {% set real_opp_wins = (mr is not none and orr is not none and orr < mr) %}
+        {% else %}
+            {% set real_my_wins = (mr is not none and orr is not none and mr > orr) %}
+            {% set real_opp_wins = (mr is not none and orr is not none and orr > mr) %}
+        {% endif %}
+        {% set z_my_wins = mz > oz %}
+        {% set z_opp_wins = oz > mz %}
         <tr>
-            <td class="num {% if mz > oz %}z-pos-2{% else %}z-neu{% endif %}" style="text-align:right">
-                {% if mz > oz %}▶ {% endif %}{{ '%+.1f'|format(mz) }}
+            <td class="num {% if real_my_wins %}z-pos-2{% else %}z-neu{% endif %}" style="text-align:right">
+                {% if real_my_wins %}▶ {% endif %}
+                {% if mr is not none %}{% if cat in ['AVG','OBP','OPS','WHIP'] %}{{ '%.3f'|format(mr) }}{% elif cat == 'ERA' %}{{ '%.2f'|format(mr) }}{% else %}{{ mr|int }}{% endif %}{% else %}—{% endif %}
+            </td>
+            <td class="num {% if z_my_wins %}z-pos-1{% else %}z-neu{% endif %}" style="text-align:right;font-size:0.78rem">
+                {{ '%+.1f'|format(mz) }}
             </td>
             <td style="text-align:center"><span class="badge">{{ cat }}</span></td>
-            <td class="num {% if oz > mz %}z-pos-2{% else %}z-neu{% endif %}" style="text-align:left">
-                {{ '%+.1f'|format(oz) }}{% if oz > mz %} ◀{% endif %}
+            <td class="num {% if z_opp_wins %}z-pos-1{% else %}z-neu{% endif %}" style="text-align:left;font-size:0.78rem">
+                {{ '%+.1f'|format(oz) }}
+            </td>
+            <td class="num {% if real_opp_wins %}z-pos-2{% else %}z-neu{% endif %}" style="text-align:left">
+                {% if orr is not none %}{% if cat in ['AVG','OBP','OPS','WHIP'] %}{{ '%.3f'|format(orr) }}{% elif cat == 'ERA' %}{{ '%.2f'|format(orr) }}{% else %}{{ orr|int }}{% endif %}{% else %}—{% endif %}
+                {% if real_opp_wins %} ◀{% endif %}
             </td>
         </tr>
         {% endfor %}
         </tbody>
     </table>
     </div>
-    <div class="hint" style="margin-bottom:14px">▶ ◀ 指向贏的一方；ERA / WHIP 用負 z 表示（值越大越好）</div>
+    <div class="hint" style="margin-bottom:14px">
+        ▶ ◀ 指向贏的一方。<strong>本週實績</strong> = Yahoo 累積到目前的數字（H2H 真正結算的依據）；<strong>z 估算</strong> = 7 路加權 z 加總（預測剩下還會打多少）。
+        E / BB / ERA / WHIP 越低越好。
+    </div>
 
     {# Rosters side-by-side #}
     <div class="grid-2">

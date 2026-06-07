@@ -324,6 +324,101 @@ def get_free_agents(league_key, position="B", count=50):
     return result[:count]
 
 
+# ── League settings (scoring cats + roster positions) ─────────
+
+_settings_cache = {}
+
+
+def get_league_settings(league_key):
+    """Return league's scoring cats + roster positions, parsed from Yahoo.
+
+    Format:
+      {
+        "scoring_type": "head" / "points" / "rotisserie",
+        "draft_type": "live" / "auction" / ...,
+        "stat_categories": [{stat_id, name, display_name, position_type, sort_order}],
+        "cat_by_id": {stat_id: stat_info},  # quick lookup
+        "roster_positions": {"C": 1, "1B": 1, ...},
+      }
+    Cached per league since settings rarely change mid-season."""
+    if league_key in _settings_cache:
+        return _settings_cache[league_key]
+
+    data = api_get(f"/league/{league_key}/settings")
+    try:
+        settings = data["fantasy_content"]["league"][1]["settings"][0]
+    except (KeyError, TypeError, IndexError) as e:
+        print(f"Error reading settings envelope: {e}")
+        return {"stat_categories": [], "cat_by_id": {}, "roster_positions": {}}
+
+    cats = []
+    cat_by_id = {}
+    raw_cats = settings.get("stat_categories", {}).get("stats", [])
+    for sc in raw_cats:
+        s = sc.get("stat", {}) if isinstance(sc, dict) else {}
+        if not s or (s.get("enabled") and s.get("enabled") != "1"):
+            continue
+        info = {
+            "stat_id":       str(s.get("stat_id", "")),
+            "name":          s.get("name", ""),
+            "display_name":  s.get("display_name", "") or s.get("name", ""),
+            "position_type": s.get("position_type", ""),  # B = batting, P = pitching
+            "sort_order":    int(s.get("sort_order", 1)) if str(s.get("sort_order", 1)).isdigit() else 1,
+        }
+        cats.append(info)
+        cat_by_id[info["stat_id"]] = info
+
+    roster = {}
+    for rp in settings.get("roster_positions", []):
+        pos_data = rp.get("roster_position", {}) if isinstance(rp, dict) else {}
+        pos   = pos_data.get("position", "")
+        count = int(pos_data.get("count", 0)) if str(pos_data.get("count", 0)).isdigit() else 0
+        if pos:
+            roster[pos] = count
+
+    result = {
+        "scoring_type":     settings.get("scoring_type", ""),
+        "draft_type":       settings.get("draft_type", ""),
+        "stat_categories":  cats,
+        "cat_by_id":        cat_by_id,
+        "roster_positions": roster,
+    }
+    _settings_cache[league_key] = result
+    return result
+
+
+def get_team_week_stats(team_key, week, cat_by_id):
+    """Accumulated cat stats for a team in a specific Yahoo H2H week.
+
+    cat_by_id comes from get_league_settings — used to translate Yahoo's
+    numeric stat_ids back to human-readable cat names (HR, RBI, etc).
+    Returns {cat_name: float_value} for every cat the league scores.
+    Empty dict if Yahoo had no data for that week (preseason / future)."""
+    try:
+        data = api_get(f"/team/{team_key}/stats;type=week;week={week}")
+        stats_raw = data["fantasy_content"]["team"][1]["team_stats"]["stats"]
+    except (KeyError, TypeError, IndexError) as e:
+        print(f"Error getting week {week} stats: {e}")
+        return {}
+
+    result = {}
+    for s in stats_raw:
+        stat = s.get("stat", {}) if isinstance(s, dict) else {}
+        sid  = str(stat.get("stat_id", ""))
+        val  = stat.get("value", "")
+        if sid not in cat_by_id:
+            continue
+        name = cat_by_id[sid]["display_name"] or cat_by_id[sid]["name"]
+        # Yahoo returns "3/5" sometimes (e.g., runs format); take first number.
+        if isinstance(val, str) and "/" in val:
+            val = val.split("/")[0]
+        try:
+            result[name] = float(val) if val not in ("-", "", None) else None
+        except (ValueError, TypeError):
+            result[name] = None
+    return result
+
+
 # ── Strength / Weakness Analysis (7x7) ─────────────────────────
 
 def analyze_player(stats, is_batter):
