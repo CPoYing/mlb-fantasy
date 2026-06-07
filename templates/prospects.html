@@ -74,6 +74,7 @@
                 <td class="num" style="color:var(--red);font-weight:700">{{ loop.index }}</td>
                 <td class="name-cell">
                     <span class="player-name">{{ p.name }}</span>
+                    {% if p.is_callup %}<span class="badge badge-red" title="近 14 天剛升上 MLB">🆙</span>{% endif %}
                 </td>
                 <td><span class="badge level-{{ p.level|replace('+', 'p') }}">{{ p.level }}</span></td>
                 <td><span class="pos-chip">{{ p.pos or '—' }}</span></td>
@@ -116,6 +117,7 @@
                 <td class="num" style="color:var(--red);font-weight:700">{{ loop.index }}</td>
                 <td class="name-cell">
                     <span class="player-name">{{ p.name }}</span>
+                    {% if p.is_callup %}<span class="badge badge-red" title="近 14 天剛升上 MLB">🆙</span>{% endif %}
                 </td>
                 <td><span class="badge level-{{ p.level|replace('+', 'p') }}">{{ p.level }}</span></td>
                 <td><span class="pos-chip">{{ p.pos }}</span></td>

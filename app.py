@@ -429,6 +429,11 @@ def api_rankings(league_key):
         return jsonify({"error": "not authenticated"}), 401
     try:
         bv, pv = player_values.compute_player_values()
+        # Statcast x-stats (xAVG, xSLG, xwOBA) — for batters, these
+        # are their own expected outcomes; for pitchers, they're batter
+        # outcomes against, so lower = better.
+        x_hit = mlb_stats.get_expected_stats(2026, "hitting")
+        x_pit = mlb_stats.get_expected_stats(2026, "pitching")
 
         def _row(name_key, val):
             stats   = val["stats"]
@@ -437,11 +442,12 @@ def api_rankings(league_key):
                 val["is_batter"], mlb_pos
             )
             primary = mlb_pos or ("SP" if not val["is_batter"] else "OF")
-            # Filter advanced stats to display only the meaningful ones
             adv_keys = (["ISO", "BB_pct", "K_pct", "BABIP", "SLG"]
                         if val["is_batter"]
                         else ["K9", "BB9", "FIP", "K_BB_pct", "BABIP"])
             adv = {k: stats.get(k) for k in adv_keys}
+            x_src = x_hit if val["is_batter"] else x_pit
+            adv.update(x_src.get(name_key, {}))
             return {
                 "name":               name_key.title(),
                 "position":           primary,
@@ -475,8 +481,15 @@ def prospects():
         return redirect(url_for("login"))
     try:
         data = player_values.compute_prospect_rankings(top_n=100)
-        # Pull the user's first league so the nav can keep showing the
-        # league-specific links (matchup/rankings/waiver/schedule).
+        # Recently-called-up players — mark with 🆙 chip so the user
+        # knows to watch them on the MLB side (they may not yet have
+        # enough MLB sample to be filtered out of the prospects list).
+        callup_names = mlb_stats.get_recent_callups(days=14)
+        norm = mlb_stats._normalize
+        for group in (data["hitters"], data["pitchers"]):
+            for p in group:
+                p["is_callup"] = norm(p["name"]) in callup_names
+
         leagues    = api.get_user_leagues()
         league_key = leagues[0]["league_key"] if leagues else None
         return render_template(

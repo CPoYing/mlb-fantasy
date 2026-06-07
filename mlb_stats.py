@@ -335,6 +335,99 @@ def get_pitching_last_n_days(days=14, season=2026, min_ip=1):
     return result
 
 
+# ── Statcast expected statistics (xAVG / xSLG / xwOBA) ──
+
+def get_expected_stats(season=2026, group="hitting"):
+    """Statcast-derived expected stats from MLB Stats API.
+
+    For hitting: xAVG, xSLG, xwOBA, xwOBA_CON — what a hitter SHOULD be
+    batting based on quality of contact, independent of luck. Hitters
+    with xAVG > AVG have been unlucky; xAVG < AVG have been lucky.
+
+    For pitching: same fields but interpreted as expected stats AGAINST
+    the pitcher (lower = better, since these are batter outcomes).
+    """
+    key = f"xstats_{group}_{season}"
+    if key in _cache:
+        return _cache[key]
+
+    all_splits = []
+    offset     = 0
+    page_size  = 1000
+    while True:
+        try:
+            r = requests.get(f"{MLB_API}/stats", params={
+                "stats":   "expectedStatistics",
+                "season":  season,
+                "group":   group,
+                "sportId": 1,
+                "limit":   page_size,
+                "offset":  offset,
+            }, timeout=60)
+            r.raise_for_status()
+        except Exception as e:
+            print(f"x-stats fetch failed ({group} {season}): {e}")
+            break
+        splits = r.json().get("stats", [{}])[0].get("splits", [])
+        all_splits.extend(splits)
+        if len(splits) < page_size:
+            break
+        offset += page_size
+
+    result = {}
+    for split in all_splits:
+        name = split.get("player", {}).get("fullName", "")
+        s    = split.get("stat", {})
+        result[_normalize(name)] = {
+            "xAVG":    _f(s.get("avg")),
+            "xSLG":    _f(s.get("slg")),
+            "xwOBA":   _f(s.get("woba")),
+            "xwOBA_CON": _f(s.get("wobaCon")),
+        }
+    _cache[key] = result
+    return result
+
+
+# ── Recent MLB call-ups (for prospect 🆙 marker) ──
+
+_CALLUP_TYPE_CODES = {"CU", "SE"}  # CU = Recalled from minors, SE = Selected (contract purchase)
+
+
+def get_recent_callups(days=30, season=2026):
+    """Return set of normalized names of players called up in the last N days.
+
+    Filters MLB transactions for typeCode in {CU, SE} which is what MLB
+    uses for promotions from MiLB to MLB. Cached per (days, end_date)."""
+    from datetime import date, timedelta
+    end       = date.today()
+    start     = end - timedelta(days=days)
+    cache_key = f"callups_{days}_{end.isoformat()}"
+    if cache_key in _cache:
+        return _cache[cache_key]
+
+    try:
+        r = requests.get(f"{MLB_API}/transactions", params={
+            "startDate": start.strftime("%m/%d/%Y"),
+            "endDate":   end.strftime("%m/%d/%Y"),
+            "sportId":   1,
+        }, timeout=30)
+        r.raise_for_status()
+        transactions = r.json().get("transactions", [])
+    except Exception as e:
+        print(f"Callup transactions fetch failed: {e}")
+        transactions = []
+
+    callups = set()
+    for tx in transactions:
+        if tx.get("typeCode") in _CALLUP_TYPE_CODES:
+            name = (tx.get("person") or {}).get("fullName", "")
+            if name:
+                callups.add(_normalize(name))
+
+    _cache[cache_key] = callups
+    return callups
+
+
 def get_player_positions(season=2026):
     """Return {norm_name: mlb_abbr} for all players in the given season (no game filter)."""
     positions = {}

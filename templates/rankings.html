@@ -92,19 +92,25 @@
 <script>
 const BATTING_CATS  = ['HR','RBI','SB','AVG','OBP','OPS','E'];
 const PITCHING_CATS = ['W','BB','HLD','SV','K','ERA','WHIP'];
-const BATTING_ADV   = ['ISO','BB_pct','K_pct','BABIP','SLG'];
-const PITCHING_ADV  = ['K9','BB9','FIP','K_BB_pct','BABIP'];
-const ADV_LABEL = { BB_pct:'BB%', K_pct:'K%', K_BB_pct:'K-BB%' };
+const BATTING_ADV   = ['ISO','BB_pct','K_pct','BABIP','SLG','xAVG','xSLG','xwOBA'];
+const PITCHING_ADV  = ['K9','BB9','FIP','K_BB_pct','BABIP','xAVG','xSLG','xwOBA'];
+const ADV_LABEL = {
+    BB_pct: 'BB%', K_pct: 'K%', K_BB_pct: 'K-BB%',
+    xAVG: 'xAVG', xSLG: 'xSLG', xwOBA: 'xwOBA',
+};
 const ADV_FMT = {
-    ISO:    v => v.toFixed(3),
-    SLG:    v => v.toFixed(3),
-    BABIP:  v => v.toFixed(3),
-    BB_pct: v => (v * 100).toFixed(1) + '%',
-    K_pct:  v => (v * 100).toFixed(1) + '%',
-    K9:     v => v.toFixed(2),
-    BB9:    v => v.toFixed(2),
-    FIP:    v => v.toFixed(2),
+    ISO:      v => v.toFixed(3),
+    SLG:      v => v.toFixed(3),
+    BABIP:    v => v.toFixed(3),
+    BB_pct:   v => (v * 100).toFixed(1) + '%',
+    K_pct:    v => (v * 100).toFixed(1) + '%',
+    K9:       v => v.toFixed(2),
+    BB9:      v => v.toFixed(2),
+    FIP:      v => v.toFixed(2),
     K_BB_pct: v => (v * 100).toFixed(1) + '%',
+    xAVG:     v => v.toFixed(3),
+    xSLG:     v => v.toFixed(3),
+    xwOBA:    v => v.toFixed(3),
 };
 const PITCHER_POS = new Set(['SP','RP']);
 
