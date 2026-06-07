@@ -120,6 +120,106 @@ def _div(num, den):
 PITCHER_ABBRS = {"P", "SP", "RP"}
 
 
+# ── Player profile + per-game logs (for /player detail page) ──
+
+def get_player_info(player_id):
+    """Biographical info: name, birthdate, age, height, weight, throws,
+    bats, primary position, current team. Cached per player_id."""
+    key = f"info_{player_id}"
+    if key in _cache:
+        return _cache[key]
+    try:
+        r = requests.get(f"{MLB_API}/people/{player_id}", timeout=15)
+        r.raise_for_status()
+        ppl = r.json().get("people", [{}])
+        info = ppl[0] if ppl else {}
+    except Exception as e:
+        print(f"player info fetch failed: {e}")
+        info = {}
+    result = {
+        "id":          info.get("id"),
+        "name":        info.get("fullName", ""),
+        "birthdate":   info.get("birthDate", ""),
+        "age":         info.get("currentAge"),
+        "height":      info.get("height", ""),
+        "weight":      info.get("weight"),
+        "bats":        (info.get("batSide", {}) or {}).get("description", ""),
+        "throws":      (info.get("pitchHand", {}) or {}).get("description", ""),
+        "primary_pos": (info.get("primaryPosition", {}) or {}).get("abbreviation", ""),
+        "team":        (info.get("currentTeam", {}) or {}).get("name", ""),
+        "mlb_debut":   info.get("mlbDebutDate", ""),
+        "headshot":    f"https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/{info.get('id', 0)}/headshot/67/current"
+                       if info.get("id") else "",
+    }
+    _cache[key] = result
+    return result
+
+
+def get_player_game_log(player_id, season=2026, group="hitting", limit=10):
+    """Per-game stats for a player, most recent first. Cached per
+    (player_id, season, group, date)."""
+    from datetime import date
+    key = f"gamelog_{player_id}_{group}_{season}_{date.today().isoformat()}"
+    if key in _cache:
+        return _cache[key]
+    try:
+        r = requests.get(
+            f"{MLB_API}/people/{player_id}/stats",
+            params={"stats": "gameLog", "group": group, "season": season},
+            timeout=20,
+        )
+        r.raise_for_status()
+        splits = r.json().get("stats", [{}])[0].get("splits", [])
+    except Exception as e:
+        print(f"game log fetch failed: {e}")
+        splits = []
+
+    # Most recent first
+    splits.sort(key=lambda s: s.get("date", ""), reverse=True)
+    games = []
+    for s in splits[:limit]:
+        st = s.get("stat", {})
+        row = {
+            "date":     s.get("date", ""),
+            "opponent": (s.get("opponent", {}) or {}).get("abbreviation", ""),
+            "home":     s.get("isHome", False),
+            "team":     (s.get("team", {}) or {}).get("abbreviation", ""),
+        }
+        if group == "hitting":
+            row.update({
+                "AB":   _f(st.get("atBats")),
+                "H":    _f(st.get("hits")),
+                "HR":   _f(st.get("homeRuns")),
+                "RBI":  _f(st.get("rbi")),
+                "R":    _f(st.get("runs")),
+                "SB":   _f(st.get("stolenBases")),
+                "BB":   _f(st.get("baseOnBalls")),
+                "K":    _f(st.get("strikeOuts")),
+                "AVG":  _f(st.get("avg")),
+                "OBP":  _f(st.get("obp")),
+                "OPS":  _f(st.get("ops")),
+            })
+        else:
+            row.update({
+                "IP":   _f(st.get("inningsPitched")),
+                "H":    _f(st.get("hits")),
+                "R":    _f(st.get("runs")),
+                "ER":   _f(st.get("earnedRuns")),
+                "BB":   _f(st.get("baseOnBalls")),
+                "K":    _f(st.get("strikeOuts")),
+                "HR":   _f(st.get("homeRuns")),
+                "W":    _f(st.get("wins")),
+                "L":    _f(st.get("losses")),
+                "SV":   _f(st.get("saves")),
+                "HLD":  _f(st.get("holds")),
+                "ERA":  _f(st.get("era")),
+                "GS":   _f(st.get("gamesStarted")),
+            })
+        games.append(row)
+    _cache[key] = games
+    return games
+
+
 def _hitter_row(split, min_g, min_pa):
     """Extract one hitter's stat dict from an MLB Stats API split,
     or return (None, None) if filtered out.
@@ -170,9 +270,10 @@ def _hitter_row(split, min_g, min_pa):
         "K":       k,
         "G":       float(games),
         # Display
-        "name":    name,
-        "team":    split.get("team", {}).get("name", ""),
-        "mlb_pos": mlb_abbr,
+        "name":      name,
+        "player_id": split.get("player", {}).get("id"),
+        "team":      split.get("team", {}).get("name", ""),
+        "mlb_pos":   mlb_abbr,
         "fantasy_eligible": mlb_pos_to_fantasy(mlb_abbr),
     }
 
@@ -246,9 +347,10 @@ def _pitcher_row(split, min_ip):
         "HR":       hr,
         "GS":       float(started),
         "G":        float(games),
-        "name":     name,
-        "team":     split.get("team", {}).get("name", ""),
-        "mlb_pos":  "SP" if is_sp else "RP",
+        "name":      name,
+        "player_id": split.get("player", {}).get("id"),
+        "team":      split.get("team", {}).get("name", ""),
+        "mlb_pos":   "SP" if is_sp else "RP",
         "fantasy_eligible": eligible,
     }
 

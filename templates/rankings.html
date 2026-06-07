@@ -245,10 +245,13 @@ function render() {
 
         const tierBadge = p.tier === 'closer' ? ' <span class="badge badge-gold">CL</span>' :
                           p.tier === 'setup'  ? ' <span class="badge badge-green">SU</span>' : '';
+        const nameCell = p.player_id
+            ? `<a href="/player/${p.player_id}" class="player-name" style="color:var(--ink);text-decoration:underline;text-decoration-style:dotted;text-decoration-color:var(--line)">${esc(p.name)}</a>`
+            : `<span class="player-name">${esc(p.name)}</span>`;
         return `<tr>
             <td class="num" style="color:var(--red);font-weight:700">${localRank}</td>
             <td class="name-cell">
-                <span class="player-name">${esc(p.name)}</span>${tierBadge}
+                ${nameCell}${tierBadge}
                 <span class="source-tag">${sourceLabel(p.source)}</span>
             </td>
             <td><div class="pos-chips">${ep}</div></td>

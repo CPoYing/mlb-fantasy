@@ -449,7 +449,8 @@ def api_rankings(league_key):
             x_src = x_hit if val["is_batter"] else x_pit
             adv.update(x_src.get(name_key, {}))
             return {
-                "name":               name_key.title(),
+                "name":               stats.get("name", name_key.title()),
+                "player_id":          stats.get("player_id"),
                 "position":           primary,
                 "eligible_positions": eligible,
                 "z_score":            round(val["total"], 2),
@@ -472,6 +473,42 @@ def api_rankings(league_key):
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/player/<int:player_id>")
+def player_detail(player_id):
+    """Per-player detail page: bio, season summary, last 10 game log."""
+    if "access_token" not in session:
+        return redirect(url_for("login"))
+    try:
+        info = mlb_stats.get_player_info(player_id)
+        is_pitcher = info.get("primary_pos") in ("P", "SP", "RP", "TWP")
+        # TWP shows both sides; for v1 default to whichever has data
+        group = "pitching" if is_pitcher else "hitting"
+        game_log = mlb_stats.get_player_game_log(player_id, season=2026, group=group, limit=10)
+        game_log_prev = mlb_stats.get_player_game_log(player_id, season=2025, group=group, limit=5)
+
+        # Look up the player in player_values for cats / z if we have them
+        bv, pv = player_values.compute_player_values()
+        norm   = mlb_stats._normalize
+        nk     = norm(info.get("name", ""))
+        val    = (pv if is_pitcher else bv).get(nk, {})
+
+        leagues    = api.get_user_leagues()
+        league_key = leagues[0]["league_key"] if leagues else None
+        return render_template(
+            "player.html",
+            info=info,
+            is_pitcher=is_pitcher,
+            game_log=game_log,
+            game_log_prev=game_log_prev,
+            val=val,
+            league_key=league_key,
+            active_page="player",
+        )
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return render_template("error.html", error=str(e))
 
 
 @app.route("/prospects")
