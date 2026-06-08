@@ -150,7 +150,7 @@
                     <span class="pos-chip">{{ p.pos }}</span>
                     <div class="player-team">{{ p.team }}</div>
                 </td>
-                <td class="num"><span class="badge badge-gold">{{ p.HR }}</span></td>
+                <td class="num">{{ p.HR }}</td>
                 <td class="num">{{ p.RBI }}</td>
                 <td class="num">{{ p.SB }}</td>
                 <td class="num">{{ p.AVG }}</td>
@@ -178,7 +178,7 @@
                     <span class="pos-chip">{{ p.pos }}</span>
                     <div class="player-team">{{ p.team }}</div>
                 </td>
-                <td class="num"><span class="badge badge-gold">{{ p.W }}</span></td>
+                <td class="num">{{ p.W }}</td>
                 <td class="num">{{ p.SV }}</td>
                 <td class="num">{{ p.K }}</td>
                 <td class="num {% if p.ERA|float < 3.0 %}z-pos-2{% elif p.ERA|float < 4.0 %}z-pos-1{% elif p.ERA|float > 4.5 %}z-neg-2{% else %}z-neu{% endif %}">{{ p.ERA }}</td>
