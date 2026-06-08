@@ -361,21 +361,30 @@ tbody tr:hover td { background: rgba(212, 160, 23, 0.08); }
 /* ── Heatmap chip (schedule) ── */
 .heat-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
     gap: 8px;
 }
 .heat-cell {
     border-radius: var(--radius);
     border: 1px solid var(--line);
-    padding: 10px 6px;
+    padding: 8px 6px 6px;
     text-align: center;
     background: var(--card);
 }
 .heat-cell .abbr { font-family: var(--font-display); font-size: 1rem; color: var(--ink); }
-.heat-cell .cnt  { font-family: var(--font-display); font-size: 1.8rem; line-height: 1.1; color: var(--ink); }
-.heat-cell .lbl  { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; }
+.heat-cell .cnt  { font-family: var(--font-display); font-size: 1.7rem; line-height: 1.05; color: var(--ink); }
+.heat-cell .lbl  { font-size: 0.62rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.heat-cell .opps {
+    margin-top: 5px;
+    padding-top: 4px;
+    border-top: 1px dashed currentColor;
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    line-height: 1.35;
+    opacity: 0.85;
+}
 .heat-7 { background: var(--green); color: var(--paper); border-color: var(--green); }
-.heat-7 .abbr, .heat-7 .cnt, .heat-7 .lbl { color: var(--paper); }
+.heat-7 .abbr, .heat-7 .cnt, .heat-7 .lbl, .heat-7 .opps { color: var(--paper); }
 .heat-6 { background: var(--gold); border-color: var(--gold); color: var(--ink); }
 .heat-5 { background: var(--paper-deep); }
 .heat-low { background: var(--card); opacity: 0.55; }
@@ -454,23 +463,78 @@ select { cursor: pointer; }
 .loading-box { text-align: center; font-family: var(--font-display); color: var(--ink); }
 .loading-box .spinner { margin-bottom: 12px; }
 
-/* ── RWD: mobile tweaks ── */
+/* ── RWD: tablet / small-laptop tweaks ── */
+@media (max-width: 800px) {
+    .topbar-inner { gap: 10px; }
+    .league-tag { font-size: 0.8rem; max-width: 200px; }
+    .nav a { font-size: 0.85rem; padding: 5px 11px; }
+}
+
+/* ── RWD: phone tweaks ── */
 @media (max-width: 640px) {
     body { font-size: 14px; }
     .container { margin: 14px auto; padding: 0 12px; }
-    .topbar-inner { padding: 8px 12px; gap: 8px; }
-    .league-tag { max-width: 100%; font-size: 0.8rem; }
-    .brand { font-size: 1.1rem; }
-    .nav { width: 100%; order: 3; overflow-x: auto; flex-wrap: nowrap; gap: 2px; padding-bottom: 2px; }
-    .nav a { white-space: nowrap; font-size: 0.82rem; padding: 5px 10px; }
+    .topbar-inner {
+        padding: 7px 11px;
+        gap: 6px;
+        flex-wrap: wrap;
+        row-gap: 5px;
+    }
+    .brand { font-size: 0.98rem; letter-spacing: 0.03em; }
+    .brand .dot { font-size: 0.85rem; }
+    .league-tag {
+        font-size: 0.72rem;
+        padding-left: 8px;
+        margin-left: 0;
+        max-width: 60vw;
+        border-left-width: 1px;
+    }
+    .nav {
+        width: 100%;
+        order: 3;
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        gap: 2px;
+        padding-bottom: 3px;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .nav::-webkit-scrollbar { display: none; }
+    .nav a {
+        white-space: nowrap;
+        font-size: 0.76rem;
+        padding: 4px 9px;
+        flex: 0 0 auto;
+    }
     .nav-divider { display: none; }
+    .theme-toggle {
+        padding: 3px 8px;
+        font-size: 0.88rem;
+        margin-left: auto;
+    }
     .card { padding: 14px; }
     .card h2 { font-size: 1rem; }
     .scoreboard .side .pts { font-size: 2.2rem; }
     .scoreboard .vs { font-size: 1.1rem; }
-    .heat-grid { grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 6px; }
+    .heat-grid { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; }
     .heat-cell .cnt { font-size: 1.4rem; }
     thead th, tbody td { padding: 6px 7px; font-size: 0.78rem; }
     .btn { padding: 6px 11px; font-size: 0.78rem; }
     .stat-tile .val { font-size: 1.3rem; }
+}
+
+/* ── RWD: very small phones (iPhone SE, etc) ── */
+@media (max-width: 380px) {
+    .topbar-inner { padding: 6px 9px; }
+    .brand { font-size: 0.88rem; }
+    .brand .dot { font-size: 0.78rem; }
+    .league-tag {
+        font-size: 0.66rem;
+        padding-left: 6px;
+        border-left: 0;
+        color: var(--gold);
+        opacity: 0.85;
+    }
+    .nav a { font-size: 0.72rem; padding: 3px 7px; }
+    .theme-toggle { font-size: 0.8rem; padding: 2px 6px; }
 }

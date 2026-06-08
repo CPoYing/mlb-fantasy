@@ -26,6 +26,13 @@
             <div class="abbr">{{ abbr }}</div>
             <div class="cnt">{{ c }}</div>
             <div class="lbl">場次</div>
+            {% if info.opp_summary %}
+            <div class="opps">
+                {% for opp in info.opp_summary %}
+                <div>{% if opp.home %}vs{% else %}@{% endif %} {{ opp.abbr }}{% if opp.n > 1 %} ×{{ opp.n }}{% endif %}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
         </div>
         {% endfor %}
     </div>
