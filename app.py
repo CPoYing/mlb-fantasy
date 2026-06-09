@@ -162,10 +162,10 @@ def dashboard():
                 pbr = _group_pitchers_by_role(pitchers)
 
                 role_display = [
-                    ("SP", "先發",       pbr["SP"], player_values.SP_CATS),
+                    ("SP", "先發投手",   pbr["SP"], player_values.SP_CATS),
                     ("CP", "終結者",     pbr["CP"], player_values.CP_CATS),
-                    ("SU", "建中 setup", pbr["SU"], player_values.SU_CATS),
-                    ("RP", "中繼 middle", pbr["RP"], player_values.RP_CATS),
+                    ("SU", "布局投手",   pbr["SU"], player_values.SU_CATS),
+                    ("RP", "中繼投手",   pbr["RP"], player_values.RP_CATS),
                 ]
                 role_blocks = [
                     {
