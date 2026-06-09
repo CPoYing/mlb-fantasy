@@ -66,8 +66,10 @@
         <button class="pos-tab" data-pos="3B">3B</button>
         <button class="pos-tab" data-pos="SS">SS</button>
         <button class="pos-tab" data-pos="OF">OF</button>
-        <button class="pos-tab" data-pos="SP">SP</button>
-        <button class="pos-tab" data-pos="RP">RP</button>
+        <button class="pos-tab" data-pos="SP" title="先發投手">SP</button>
+        <button class="pos-tab" data-pos="CP" title="終結者（closer）">CP</button>
+        <button class="pos-tab" data-pos="SU" title="建中投手（setup）">SU</button>
+        <button class="pos-tab" data-pos="RP" title="一般中繼（middle relief）">RP</button>
         <button class="adv-toggle" id="advToggle" title="顯示 FanGraphs / Savant 風格進階指標">進階</button>
     </div>
 
@@ -76,9 +78,11 @@
         缺哪個時間窗就由其他幾個按比例補上（傷兵不會被罰）。
         <span class="source-tag">blend</span> 表示有 ≥ 2 個窗有資料。
         <br>
-        <strong>SP</strong> 跟自己這群比（5 cat: W/BB/K/ERA/WHIP）、<strong>RP</strong> 跟 RP 比（6 cat: BB/HLD/SV/K/ERA/WHIP）。
+        投手 4 角色獨立池：<strong>SP</strong>（W/BB/K/ERA/WHIP）、<strong>CP</strong>（SV/BB/K/ERA/WHIP）、
+        <strong>SU</strong>（HLD/BB/K/ERA/WHIP）、<strong>RP</strong>（BB/HLD/SV/K/ERA/WHIP，中繼）。
+        各自跟同類比 z，所以 closer 不會被 HLD=0 拖累、setup 不會被 SV=0 拖累。
+        <br>
         雙守位 IP&gt;35 算 SP；IP&lt;10 且 2025 沒數據或 ERA&gt;4 直接排除。
-        RP 旁的 <span class="badge badge-gold">CL</span>=closer、<span class="badge badge-green">SU</span>=setup。
     </div>
 
     <div class="tbl-wrap" id="rnk-wrap" style="display:none">
@@ -92,6 +96,13 @@
 <script>
 const BATTING_CATS  = ['HR','RBI','SB','AVG','OBP','OPS','E'];
 const PITCHING_CATS = ['W','BB','HLD','SV','K','ERA','WHIP'];
+const ROLE_CATS = {
+    SP: ['W','BB','K','ERA','WHIP'],
+    CP: ['SV','BB','K','ERA','WHIP'],
+    SU: ['HLD','BB','K','ERA','WHIP'],
+    RP: ['BB','HLD','SV','K','ERA','WHIP'],
+};
+const PITCHER_ROLES = new Set(['SP','CP','SU','RP']);
 const BATTING_ADV   = ['ISO','BB_pct','K_pct','BABIP','SLG','xAVG','xSLG','xwOBA'];
 const PITCHING_ADV  = ['K9','BB9','FIP','K_BB_pct','BABIP','xAVG','xSLG','xwOBA'];
 const ADV_LABEL = {
@@ -112,7 +123,6 @@ const ADV_FMT = {
     xSLG:     v => v.toFixed(3),
     xwOBA:    v => v.toFixed(3),
 };
-const PITCHER_POS = new Set(['SP','RP']);
 
 let allPlayers = [];
 let currentPos = 'ALL';
@@ -137,7 +147,13 @@ async function loadData() {
 function filtered() {
     let list = allPlayers;
     if (currentPos !== 'ALL') {
-        list = list.filter(p => (p.eligible_positions || []).includes(currentPos));
+        if (PITCHER_ROLES.has(currentPos)) {
+            // Pitcher tab — filter by computed role (not Yahoo eligibility),
+            // so the user actually sees CPs/SUs not all RPs.
+            list = list.filter(p => p.role === currentPos);
+        } else {
+            list = list.filter(p => (p.eligible_positions || []).includes(currentPos));
+        }
     }
     return sortList(list);
 }
@@ -160,8 +176,11 @@ function colVal(p, col) {
 }
 
 function getCols(pos) {
-    if (PITCHER_POS.has(pos)) return { bat: [], pit: PITCHING_CATS, batAdv: [], pitAdv: PITCHING_ADV };
-    if (pos === 'ALL')        return { bat: BATTING_CATS, pit: PITCHING_CATS, batAdv: BATTING_ADV, pitAdv: PITCHING_ADV };
+    if (PITCHER_ROLES.has(pos)) {
+        // Show only that role's cats (5 cats for SP/CP/SU, 6 for RP).
+        return { bat: [], pit: ROLE_CATS[pos], batAdv: [], pitAdv: PITCHING_ADV };
+    }
+    if (pos === 'ALL') return { bat: BATTING_CATS, pit: PITCHING_CATS, batAdv: BATTING_ADV, pitAdv: PITCHING_ADV };
     return { bat: BATTING_CATS, pit: [], batAdv: BATTING_ADV, pitAdv: [] };
 }
 

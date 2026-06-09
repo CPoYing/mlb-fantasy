@@ -84,16 +84,15 @@ PITCHING_ADV  = ["K9", "BB9", "FIP", "K_BB_pct", "BABIP"]
 
 def _build_roster_view(roster, values):
     """Attach z-score totals + cat z-scores to a roster list.
-    `values` is the tuple (batter_values, pitcher_values) returned by
-    player_values.compute_player_values(). Yahoo's display_position
-    (passed in as `p["is_batter"]`) is the source of truth for which dict
-    to consult, so two-way players get the correct categories."""
+    Returns (batters, pitchers) — pitchers carry a `role` field
+    (SP / CP / SU / RP) so callers can group / filter them."""
     norm = mlb_stats._normalize
     bv, pv = values
     batters, pitchers = [], []
     for p in roster:
         src = bv if p["is_batter"] else pv
         v   = src.get(norm(p["name"]), {})
+        role = v.get("role") if not p["is_batter"] else None
         row = {
             "name":      p["name"],
             "position":  p["position"],
@@ -104,13 +103,25 @@ def _build_roster_view(roster, values):
             "total":     round(v["total"], 2) if v.get("total") is not None else None,
             "cats":      v.get("cats", {}),
             "analysis":  p.get("analysis", {"strengths": [], "weaknesses": []}),
-            "stat_keys": BATTING_CATS if p["is_batter"] else PITCHING_CATS,
+            "role":      role,
+            "tier":      v.get("tier"),
+            "stat_keys": (BATTING_CATS if p["is_batter"]
+                          else player_values.ROLE_CATS.get(role, PITCHING_CATS)),
             "adv_keys":  BATTING_ADV  if p["is_batter"] else PITCHING_ADV,
         }
         (batters if p["is_batter"] else pitchers).append(row)
     batters.sort(key=lambda x: x["total"] or -99, reverse=True)
     pitchers.sort(key=lambda x: x["total"] or -99, reverse=True)
     return batters, pitchers
+
+
+def _group_pitchers_by_role(pitchers):
+    """Split a flat pitchers list into {SP/CP/SU/RP: [pitchers]}.
+    Unknown role (e.g., no stats yet) falls into RP middle bucket."""
+    groups = {"SP": [], "CP": [], "SU": [], "RP": []}
+    for p in pitchers:
+        groups.get(p.get("role"), groups["RP"]).append(p)
+    return groups
 
 
 def _roster_cat_totals(roster_view, cats=None):
@@ -148,14 +159,34 @@ def dashboard():
                 roster  = api.get_team_roster_with_stats(my_team["team_key"])
                 values  = player_values.compute_player_values()
                 batters, pitchers = _build_roster_view(roster, values)
+                pbr = _group_pitchers_by_role(pitchers)
+
+                role_display = [
+                    ("SP", "先發",       pbr["SP"], player_values.SP_CATS),
+                    ("CP", "終結者",     pbr["CP"], player_values.CP_CATS),
+                    ("SU", "建中 setup", pbr["SU"], player_values.SU_CATS),
+                    ("RP", "中繼 middle", pbr["RP"], player_values.RP_CATS),
+                ]
+                role_blocks = [
+                    {
+                        "role":     role,
+                        "label":    label,
+                        "players":  players,
+                        "cats":     cats,
+                        "totals":   _roster_cat_totals(players, cats),
+                        "team_z":   _team_total(players),
+                    }
+                    for role, label, players, cats in role_display
+                    if players  # skip empty roles
+                ]
+
                 my_team_display = {
                     "team":           my_team,
                     "batters":        batters,
-                    "pitchers":       pitchers,
                     "league_key":     league_key,
                     "batter_totals":  _roster_cat_totals(batters,  BATTING_CATS),
-                    "pitcher_totals": _roster_cat_totals(pitchers, PITCHING_CATS),
                     "batter_team_z":  _team_total(batters),
+                    "pitcher_role_blocks": role_blocks,
                     "pitcher_team_z": _team_total(pitchers),
                 }
 
@@ -282,9 +313,11 @@ def waiver(league_key):
         norm      = mlb_stats._normalize
 
         # Worst z on my roster — split by role so cross-role comparisons
-        # don't happen (SP and RP are scored against different norms).
+        # don't happen. Each pitcher role (SP / CP / SU / RP) is scored
+        # against its own norm pool with its own cats, so an FA can only
+        # fairly be compared to my weakest player in the same role.
         my_worst_bat_by_pos    = {}  # batter position → (z, name)
-        my_worst_pitcher_by_role = {}  # "SP" or "RP" → (z, name)
+        my_worst_pitcher_by_role = {}  # "SP" / "CP" / "SU" / "RP" → (z, name)
         for p in my_roster:
             src = bv if p["is_batter"] else pv
             v = src.get(norm(p["name"]), {})

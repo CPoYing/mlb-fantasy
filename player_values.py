@@ -38,9 +38,18 @@ import mlb_stats
 # ── Categories ────────────────────────────────────────────────
 
 BATTING_CATS  = ["HR", "RBI", "SB", "AVG", "OBP", "OPS", "E"]
-SP_CATS       = ["W", "BB", "K", "ERA", "WHIP"]
-RP_CATS       = ["BB", "HLD", "SV", "K", "ERA", "WHIP"]
-PITCHING_CATS = ["W", "BB", "HLD", "SV", "K", "ERA", "WHIP"]
+
+# Pitcher cat sets — role-aware so each role only competes on cats it can
+# actually accumulate (SP can't get SV/HLD, CP can't get HLD/W, SU can't
+# get SV/W). Middle reliever keeps both HLD/SV since they occasionally
+# pick up either. Stops structural zeros from dragging z-scores down.
+SP_CATS  = ["W", "BB", "K", "ERA", "WHIP"]
+CP_CATS  = ["SV", "BB", "K", "ERA", "WHIP"]
+SU_CATS  = ["HLD", "BB", "K", "ERA", "WHIP"]
+RP_CATS  = ["BB", "HLD", "SV", "K", "ERA", "WHIP"]   # middle reliever
+PITCHING_CATS = ["W", "BB", "HLD", "SV", "K", "ERA", "WHIP"]  # full display order
+ROLE_CATS = {"SP": SP_CATS, "CP": CP_CATS, "SU": SU_CATS, "RP": RP_CATS}
+
 LOWER_BETTER  = {"E", "BB", "ERA", "WHIP", "BB9", "FIP"}
 
 # ── Blend weights (sum to 1.0) ────────────────────────────────
@@ -236,33 +245,52 @@ def _score_group(windows_data, cats, is_batter, norm_thresholds):
 
 
 def _score_pitchers(p_windows):
-    """Split pitchers into SP/RP using full-season totals, then score each
-    role across its own windowed pool."""
+    """Split pitchers into SP / CP / SU / RP (middle) using full-season
+    totals + tier inference, then score each role within its own pool
+    using only that role's relevant cats."""
     p_2025 = p_windows.get("2025", {})
     p_2026 = p_windows.get("2026", {})
 
-    sp_windows = {w: {} for w in WEIGHTS}
-    rp_windows = {w: {} for w in WEIGHTS}
+    buckets = {
+        "SP": {w: {} for w in WEIGHTS},
+        "CP": {w: {} for w in WEIGHTS},
+        "SU": {w: {} for w in WEIGHTS},
+        "RP": {w: {} for w in WEIGHTS},
+    }
 
     for name in set(p_2025) | set(p_2026):
         s_now  = p_2026.get(name)
         s_prev = p_2025.get(name)
         if _exclude_junk_pitcher(s_now, s_prev):
             continue
-        target = sp_windows if _classify_sp(s_now, s_prev) else rp_windows
+        if _classify_sp(s_now, s_prev):
+            role = "SP"
+        else:
+            tier = _rp_tier(s_now, s_prev)
+            role = {"closer": "CP", "setup": "SU"}.get(tier, "RP")
+        target = buckets[role]
         for window in WEIGHTS:
             if name in p_windows.get(window, {}):
                 target[window][name] = p_windows[window][name]
 
-    sp_values = _score_group(sp_windows, SP_CATS, False, SP_NORM_THRESHOLDS)
-    rp_values = _score_group(rp_windows, RP_CATS, False, RP_NORM_THRESHOLDS)
+    sp_values = _score_group(buckets["SP"], SP_CATS, False, SP_NORM_THRESHOLDS)
+    cp_values = _score_group(buckets["CP"], CP_CATS, False, RP_NORM_THRESHOLDS)
+    su_values = _score_group(buckets["SU"], SU_CATS, False, RP_NORM_THRESHOLDS)
+    rp_values = _score_group(buckets["RP"], RP_CATS, False, RP_NORM_THRESHOLDS)
 
-    for entry in sp_values.values():
-        entry["role"] = "SP"
-    for name, entry in rp_values.items():
-        entry["role"] = "RP"
-        entry["tier"] = _rp_tier(p_2026.get(name), p_2025.get(name))
-    return {**sp_values, **rp_values}
+    for v in sp_values.values():
+        v["role"] = "SP"
+    for v in cp_values.values():
+        v["role"] = "CP"
+        v["tier"] = "closer"
+    for v in su_values.values():
+        v["role"] = "SU"
+        v["tier"] = "setup"
+    for v in rp_values.values():
+        v["role"] = "RP"
+        v["tier"] = "middle"
+    # No name collisions: each pitcher classified into exactly one bucket.
+    return {**sp_values, **cp_values, **su_values, **rp_values}
 
 
 # ── Public ────────────────────────────────────────────────────

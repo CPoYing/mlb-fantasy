@@ -69,27 +69,39 @@
         <div class="hint" style="margin-top:6px">合計列：每項 z 加總 = 該項相對聯盟強弱；正越大越強</div>
     </div>
 
-    {# Pitchers #}
-    <div class="card">
-        <h2>投手 · 7×7 z-score</h2>
+    {# Pitchers — split by role (SP / CP / SU / RP) so each only competes
+       on cats it can actually accumulate. Saves the user from looking
+       at structural-zero columns. #}
+    <div>
+    {% for blk in mtd.pitcher_role_blocks %}
+    <div class="card" style="margin-bottom:14px">
+        <div class="section-title-row" style="margin-bottom:8px">
+            <h2 style="border:0;padding:0;margin:0">
+                {% if blk.role == 'SP' %}SP · 先發
+                {% elif blk.role == 'CP' %}CP · 終結
+                {% elif blk.role == 'SU' %}SU · 建中
+                {% else %}RP · 中繼{% endif %}
+                <span style="color:var(--muted);font-size:0.78rem;font-family:var(--font-body);letter-spacing:0">{{ blk.players|length }} 位</span>
+            </h2>
+        </div>
         <div class="tbl-wrap">
         <table>
             <thead>
                 <tr>
                     <th>球員</th>
-                    {% for cat in ['W','BB','HLD','SV','K','ERA','WHIP'] %}<th class="num">{{ cat }}</th>{% endfor %}
+                    {% for cat in blk.cats %}<th class="num">{{ cat }}</th>{% endfor %}
                     <th class="num">總分</th>
                 </tr>
             </thead>
             <tbody>
-            {% for p in mtd.pitchers %}
+            {% for p in blk.players %}
             <tr>
                 <td>
                     <span class="player-name">{{ p.name }}</span>
                     <span class="pos-chip">{{ p.position }}</span>
                     <div class="player-team">{{ p.team }}</div>
                 </td>
-                {% for cat in ['W','BB','HLD','SV','K','ERA','WHIP'] %}
+                {% for cat in blk.cats %}
                 {% set z = p.cats.get(cat) %}
                 <td class="num {% if z is not none and z >= 1 %}z-pos-2{% elif z is not none and z >= 0.3 %}z-pos-1{% elif z is not none and z <= -1 %}z-neg-2{% elif z is not none and z <= -0.3 %}z-neg-1{% else %}z-neu{% endif %}">
                     {% if z is not none %}{{ '%+.1f'|format(z) }}{% else %}—{% endif %}
@@ -100,29 +112,32 @@
                 </td>
             </tr>
             {% endfor %}
-            {% if not mtd.pitchers %}
-            <tr><td colspan="9" class="empty" style="padding:24px">尚未選秀</td></tr>
-            {% endif %}
             </tbody>
-            {% if mtd.pitchers %}
             <tfoot>
                 <tr style="background:var(--ink);color:var(--paper);font-family:var(--font-display);letter-spacing:0.05em">
-                    <td style="padding:8px 10px;text-transform:uppercase;font-size:0.78rem">隊伍合計</td>
-                    {% for cat in ['W','BB','HLD','SV','K','ERA','WHIP'] %}
-                    {% set z = mtd.pitcher_totals.get(cat) %}
+                    <td style="padding:8px 10px;text-transform:uppercase;font-size:0.78rem">{{ blk.role }} 合計</td>
+                    {% for cat in blk.cats %}
+                    {% set z = blk.totals.get(cat) %}
                     <td class="num" style="padding:8px 10px;color:{% if z is not none and z >= 0 %}var(--green-soft){% else %}var(--red-dim){% endif %};font-weight:700">
                         {% if z is not none %}{{ '%+.1f'|format(z) }}{% else %}—{% endif %}
                     </td>
                     {% endfor %}
-                    <td class="num" style="padding:8px 10px;font-weight:700;color:{% if mtd.pitcher_team_z >= 0 %}var(--gold){% else %}var(--red-dim){% endif %}">
-                        {{ '%+.1f'|format(mtd.pitcher_team_z) }}
+                    <td class="num" style="padding:8px 10px;font-weight:700;color:{% if blk.team_z >= 0 %}var(--gold){% else %}var(--red-dim){% endif %}">
+                        {{ '%+.1f'|format(blk.team_z) }}
                     </td>
                 </tr>
             </tfoot>
-            {% endif %}
         </table>
         </div>
-        <div class="hint" style="margin-top:8px">SP 不計 HLD/SV、RP 不計 W（在合計列會自動顯示 0）。分數加權：近 14 天 20% + 近 30 天 10% + 2026 整季 60% + 2025 整季 10%。</div>
+    </div>
+    {% endfor %}
+    {% if not mtd.pitcher_role_blocks %}
+    <div class="card empty">尚未選秀</div>
+    {% endif %}
+    <div class="hint" style="margin-top:4px">
+        各角色獨立比較：SP 只算 W/BB/K/ERA/WHIP、CP 只算 SV/BB/K/ERA/WHIP、SU 只算 HLD/BB/K/ERA/WHIP、RP 中繼算全部 6 項。
+        分數加權：近 14 天 20% + 近 30 天 10% + 2026 整季 60% + 2025 整季 10%。
+    </div>
     </div>
 </div>
 {% endif %}
