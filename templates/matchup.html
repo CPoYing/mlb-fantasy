@@ -42,8 +42,14 @@
     {% endif %}
 
     {% if pitchers %}
-    <div class="hint" style="margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.1em">投手</div>
-    {% for p in pitchers %}
+    {% set role_labels = [('SP', 'SP · 先發投手'), ('CP', 'CP · 終結者'), ('SU', 'SU · 布局投手'), ('RP', 'RP · 中繼')] %}
+    {% for role, label in role_labels %}
+    {% set role_pitchers = pitchers | selectattr('role', 'equalto', role) | list %}
+    {% if role_pitchers %}
+    <div class="hint" style="margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.1em">
+        {{ label }} <span style="text-transform:none;letter-spacing:0;color:var(--muted)">· {{ role_pitchers|length }} 位</span>
+    </div>
+    {% for p in role_pitchers %}
     <div style="padding:8px 0;border-bottom:1px dashed var(--line)">
         <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
             <span class="player-name">{{ p.name }}</span>
@@ -77,6 +83,8 @@
         </div>
         {% endif %}
     </div>
+    {% endfor %}
+    {% endif %}
     {% endfor %}
     {% endif %}
 

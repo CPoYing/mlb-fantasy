@@ -39,10 +39,10 @@
                         {{ p.team }} ·
                         {% if p.status == 'W' %}<span class="badge badge-warn">Waiver</span>{% else %}<span class="badge badge-green">FA</span>{% endif %}
                         {% if p.is_hot %}<span class="badge badge-red" title="近 7 日火熱">🔥 HOT</span>{% endif %}
-                        {% if p.role == 'SP' %}<span class="badge badge-ghost">SP</span>
-                        {% elif p.role == 'CP' %}<span class="badge badge-gold">CLOSER</span>
-                        {% elif p.role == 'SU' %}<span class="badge badge-green">SETUP</span>
-                        {% elif p.role == 'RP' %}<span class="badge badge-ghost">MIDDLE</span>{% endif %}
+                        {% if p.role == 'SP' %}<span class="badge badge-ghost">先發</span>
+                        {% elif p.role == 'CP' %}<span class="badge badge-gold">終結者</span>
+                        {% elif p.role == 'SU' %}<span class="badge badge-green">布局投手</span>
+                        {% elif p.role == 'RP' %}<span class="badge badge-ghost">中繼</span>{% endif %}
                         {% if p.small_sample %}
                         <span class="badge badge-warn" title="2026 樣本不足，z 分可信度低{% if p.is_batter %}（PA {{ p.cur_volume|int }} < 50）{% else %}（IP {{ p.cur_volume }} < 10）{% endif %}">⚠ 小樣本</span>
                         {% endif %}

@@ -12,8 +12,8 @@
             {{ info.team }} ·
             <span class="pos-chip">{{ info.primary_pos }}</span>
             {% if val.role %}<span class="badge {% if val.role == 'SP' %}badge-gold{% else %}badge-green{% endif %}">{{ val.role }}</span>{% endif %}
-            {% if val.tier == 'closer' %}<span class="badge badge-gold">CLOSER</span>
-            {% elif val.tier == 'setup' %}<span class="badge badge-green">SETUP</span>{% endif %}
+            {% if val.tier == 'closer' %}<span class="badge badge-gold">終結者</span>
+            {% elif val.tier == 'setup' %}<span class="badge badge-green">布局投手</span>{% endif %}
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:12px;font-size:0.85rem;color:var(--muted)">
             {% if info.age %}<span>年齡 <strong style="color:var(--ink)">{{ info.age }}</strong></span>{% endif %}

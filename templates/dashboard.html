@@ -77,10 +77,10 @@
     <div class="card" style="margin-bottom:14px">
         <div class="section-title-row" style="margin-bottom:8px">
             <h2 style="border:0;padding:0;margin:0">
-                {% if blk.role == 'SP' %}SP · 先發
-                {% elif blk.role == 'CP' %}CP · 終結
-                {% elif blk.role == 'SU' %}SU · 建中
-                {% else %}RP · 中繼{% endif %}
+                {% if blk.role == 'SP' %}SP · 先發投手
+                {% elif blk.role == 'CP' %}CP · 終結者
+                {% elif blk.role == 'SU' %}SU · 布局投手
+                {% else %}RP · 中繼投手{% endif %}
                 <span style="color:var(--muted);font-size:0.78rem;font-family:var(--font-body);letter-spacing:0">{{ blk.players|length }} 位</span>
             </h2>
         </div>
@@ -135,7 +135,8 @@
     <div class="card empty">尚未選秀</div>
     {% endif %}
     <div class="hint" style="margin-top:4px">
-        各角色獨立比較：SP 只算 W/BB/K/ERA/WHIP、CP 只算 SV/BB/K/ERA/WHIP、SU 只算 HLD/BB/K/ERA/WHIP、RP 中繼算全部 6 項。
+        各角色獨立比較：<strong>SP 先發</strong> 只算 W/BB/K/ERA/WHIP、<strong>CP 終結者</strong> 只算 SV/BB/K/ERA/WHIP、
+        <strong>SU 布局投手</strong> 只算 HLD/BB/K/ERA/WHIP、<strong>RP 中繼</strong> 算 BB/HLD/SV/K/ERA/WHIP 全部 6 項。
         分數加權：近 14 天 20% + 近 30 天 10% + 2026 整季 60% + 2025 整季 10%。
     </div>
     </div>
