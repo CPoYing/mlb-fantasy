@@ -28,12 +28,11 @@ TOKEN_URL = "https://api.login.yahoo.com/oauth2/get_token"
 
 oauth = None
 
-
 def make_oauth():
     return OAuth2Session(CLIENT_ID, redirect_uri=REDIRECT_URI)
 
 
-# ── Auth ───────────────────────────────────────────────────────
+# ── Auth ──────────────────────────────────
 
 @app.route("/")
 def index():
@@ -71,7 +70,7 @@ def logout():
     return redirect(url_for("index"))
 
 
-# ── Helpers ────────────────────────────────────────────────────
+# ── Helpers ─────────────────────────────────
 
 # League scoring categories (7x7 H2H)
 BATTING_CATS  = ["HR", "RBI", "SB", "AVG", "OBP", "OPS", "E"]
@@ -141,7 +140,7 @@ def _team_total(roster_view):
     return round(sum((p.get("total") or 0) for p in roster_view), 2)
 
 
-# ── Pages ──────────────────────────────────────────────────────
+# ── Pages ─────────────────────────────────
 
 @app.route("/dashboard")
 def dashboard():
@@ -345,11 +344,9 @@ def waiver(league_key):
             for h in hot.get(grp, []):
                 hot_names.add(norm(h.get("name", "")))
 
-        # MLB merged stats by name (covers FAs that aren't qualified for values)
+        # Current season stats (for FAs not in the z-scored values, or for volume checks)
         hitting  = mlb_stats.get_hitting_stats_merged()
         pitching = mlb_stats.get_pitching_stats_merged()
-        # 2026 only — for the small-sample warning (we want current-season
-        # sample size, not the 2025-padded merged version).
         hit_2026 = mlb_stats.get_hitting_stats_by_name(2026)
         pit_2026 = mlb_stats.get_pitching_stats_by_name(2026)
 
@@ -519,7 +516,6 @@ def player_detail(player_id):
         # TWP shows both sides; for v1 default to whichever has data
         group = "pitching" if is_pitcher else "hitting"
         game_log = mlb_stats.get_player_game_log(player_id, season=2026, group=group, limit=10)
-        game_log_prev = mlb_stats.get_player_game_log(player_id, season=2025, group=group, limit=5)
 
         # Look up the player in player_values for cats / z if we have them
         bv, pv = player_values.compute_player_values()
@@ -534,7 +530,6 @@ def player_detail(player_id):
             info=info,
             is_pitcher=is_pitcher,
             game_log=game_log,
-            game_log_prev=game_log_prev,
             val=val,
             league_key=league_key,
             active_page="player",
@@ -551,7 +546,7 @@ def prospects():
         return redirect(url_for("login"))
     try:
         data = player_values.compute_prospect_rankings(top_n=100)
-        # Recently-called-up players — mark with 🆙 chip so the user
+        # Recently-called-up players — mark with 🅰️ chip so the user
         # knows to watch them on the MLB side (they may not yet have
         # enough MLB sample to be filtered out of the prospects list).
         callup_names = mlb_stats.get_recent_callups(days=14)
@@ -603,7 +598,7 @@ def schedule(league_key):
         return render_template("error.html", error=str(e))
 
 
-# ── Scheduler ─────────────────────────────────────────────────
+# ── Scheduler ─────────────────────────────
 
 scheduler = BackgroundScheduler()
 
@@ -612,12 +607,11 @@ def scheduled_report():
     print("Running scheduled email report...")
     email_report.send_weekly_report()
 
-
 scheduler.add_job(scheduled_report, "cron", day_of_week="mon", hour=8, minute=0)
 scheduler.start()
 
 
-# ── Run ────────────────────────────────────────────────────────
+# ── Run ─────────────────────────────
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5001))
