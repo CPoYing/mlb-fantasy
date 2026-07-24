@@ -33,6 +33,7 @@ Z-score blend (per cat, per player):
   `source` label is "blend" if ≥ 2 windows contributed, else the single window.
 """
 import statistics
+import datetime
 import mlb_stats
 
 # ── Categories ────────────────────────────────────────────────
@@ -86,12 +87,32 @@ RP_NORM_THRESHOLDS = {
 
 # ── Role classification ──
 
-SP_IP_THRESHOLD     = 35  # dual-eligible (≥5 starts) + max-season IP > 35 → SP
-SP_MIN_STARTS      = 5    # spot starts (<5 over the two seasons) → still pure RP
+SP_MIN_STARTS      = 5    # <5 先發 → 純 RP（跟賽季進度無關的硬門檻）
+# SP 的 IP 門檻改成「整季 5 場先發量」的比例值，隨賽季進度縮放，
+# 避免賽季後段長中繼靠累積局數被誤判成先發。
+SP_IP_FULL_SEASON  = 55   # 整季基準：約 5 場先發的局數
+def SP_IP_THRESHOLD():
+    return SP_IP_FULL_SEASON * _season_progress()
 
-SEASON_PRORATE_FACTOR = 3.0
-RP_CLOSER_SV = 10
-RP_SETUP_HLD = 12
+# 終結者 / 布局投手判定：把當前 SV / HLD 投影成整季步調後比門檻
+RP_CLOSER_SV = 15   # 整季投影 ≥15 SV → 終結者（closer）
+RP_SETUP_HLD = 15   # 整季投影 ≥15 HLD → 布局投手（setup）
+
+# ── 賽季進度（動態，取代舊的固定 SEASON_PRORATE_FACTOR = 3.0）──
+# 2026 例行賽區間（約略）；用來把累積型數據（SV/HLD/IP）投影成整季步調，
+# 讓 closer/setup 的判定隨賽季自動校正，不用再手動改係數。
+SEASON_START = datetime.date(2026, 4, 13)
+SEASON_END   = datetime.date(2026, 9, 28)
+
+def _season_progress():
+    """已進行的例行賽比例，夾在 [0.05, 1.0]。"""
+    total = (SEASON_END - SEASON_START).days
+    elapsed = (datetime.date.today() - SEASON_START).days
+    return min(max(elapsed / total, 0.05), 1.0)
+
+def _prorate_factor():
+    """把當前累積數據投影成整季步調的倍率（賽季初大、賽季末→1）。"""
+    return 1.0 / _season_progress()
 
 # 投手排除門檻：2026 IP 低於此值才整個排除（原本 10，移除 2025 後改低門檻，
 # 避免出賽少但確實有數據的投手如 Evan Phillips 無聲消失；調高=更嚴、調低=更寬鬆）
@@ -154,12 +175,13 @@ def _blend_multi(per_window):
 
 def _classify_sp(s_2026):
     """SP if enough starts in current season AND sufficient IP volume.
+    IP 門檻隨賽季進度縮放（賽季後段要求較高的累積局數）。
     Otherwise treated as RP (spot starters / long relievers stay RP)."""
     gs = (s_2026.get("GS") if s_2026 else 0) or 0
     if gs < SP_MIN_STARTS:
         return False
     ip = (s_2026.get("IP") if s_2026 else 0) or 0
-    return ip > SP_IP_THRESHOLD
+    return ip > SP_IP_THRESHOLD()
 
 
 def _exclude_junk_pitcher(s_2026):
@@ -168,8 +190,10 @@ def _exclude_junk_pitcher(s_2026):
 
 
 def _rp_tier(s_2026):
-    sv_now   = ((s_2026.get("SV")  or 0) * SEASON_PRORATE_FACTOR) if s_2026 else 0
-    hld_now  = ((s_2026.get("HLD") or 0) * SEASON_PRORATE_FACTOR) if s_2026 else 0
+    """把當前 SV / HLD 用賽季進度投影成整季步調再比門檻，賽季任何時點都準。"""
+    factor   = _prorate_factor()
+    sv_now   = ((s_2026.get("SV")  or 0) * factor) if s_2026 else 0
+    hld_now  = ((s_2026.get("HLD") or 0) * factor) if s_2026 else 0
     if sv_now >= RP_CLOSER_SV:
         return "closer"
     if hld_now >= RP_SETUP_HLD:
