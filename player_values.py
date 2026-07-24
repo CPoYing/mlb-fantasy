@@ -19,7 +19,10 @@ Role classification (uses current season GS/IP only):
   - otherwise → RP (closer/setup detection uses current season)
 
 Junk-pitcher exclusion:
-  - IP_current < 10  → excluded entirely
+  - IP_current < JUNK_PITCHER_MIN_IP (3)  → excluded entirely
+    (低門檻：只擋幾乎沒出賽的雜訊/野手救火；出賽少但有數據的投手保留，
+     由 small-sample 警告標示，不再無聲消失。2025 移除前是 IP<10 才排除、
+     但有好的 2025 成績就留下，現在改用低 IP 門檻近似同效果。)
 
 Z-score blend (per cat, per player):
     z = 0.222·z_14d + 0.111·z_30d + 0.667·z_2026
@@ -85,6 +88,10 @@ SP_MIN_STARTS      = 5    # spot starts (<5 over the two seasons) → still pure
 SEASON_PRORATE_FACTOR = 3.0
 RP_CLOSER_SV = 10
 RP_SETUP_HLD = 12
+
+# 投手排除門檻：2026 IP 低於此值才整個排除（原本 10，移除 2025 後改低門檻，
+# 避免出賽少但確實有數據的投手如 Evan Phillips 無聲消失；調高=更嚴、調低=更寬鬆）
+JUNK_PITCHER_MIN_IP = 3
 
 # ── Prospects ──
 
@@ -153,7 +160,7 @@ def _classify_sp(s_2026):
 
 def _exclude_junk_pitcher(s_2026):
     ip = (s_2026.get("IP") if s_2026 else 0) or 0
-    return ip < 10
+    return ip < JUNK_PITCHER_MIN_IP
 
 
 def _rp_tier(s_2026):
