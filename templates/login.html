@@ -2,14 +2,17 @@
 {% block title %}登入{% endblock %}
 {% block content %}
 <div class="hero">
-    <div class="emblem">⚾</div>
-    <h1>MLB Fantasy</h1>
-    <div class="sub">7×7 H2H 戰情室 — 復古卡片風</div>
-    <a href="{{ url_for('login') }}" class="btn btn-primary" style="font-size:1rem;padding:12px 28px">
-        使用 Yahoo 帳號登入
-    </a>
-    <div class="hint" style="margin-top:24px">
-        登入後可看：我的隊伍 z-score · 本週對戰 · 全聯盟排名 · Waiver 推薦 · 週賽程熱區
+    <div class="hero-card">
+        <span class="rookie">★ Rookie Card · 2026 ★</span>
+        <div class="emblem">⚾</div>
+        <h1>MLB Fantasy</h1>
+        <div class="sub">7×7 H2H 戰情室 — 復古卡片風</div>
+        <a href="{{ url_for('login') }}" class="btn btn-primary" style="font-size:1rem;padding:12px 28px">
+            使用 Yahoo 帳號登入
+        </a>
+        <div class="hint" style="margin-top:24px">
+            登入後可看：我的隊伍 z-score · 本週對戰 · 全聯盟排名 · Waiver 推薦 · 週賽程熱區
+        </div>
     </div>
 </div>
 {% endblock %}

@@ -48,7 +48,7 @@
     <div class="loading-box">
         <div class="spinner"></div>
         <div>正在載入全聯盟球員排名...</div>
-        <div class="hint" style="margin-top:6px">首次載入約需 15–25 秒（要抓 ~1500 位球員的 2025+2026 數據）</div>
+        <div class="hint" style="margin-top:6px">首次載入約需 15–25 秒（要抓 ~1500 位球員的 2026 數據）</div>
     </div>
 </div>
 
@@ -74,7 +74,7 @@
     </div>
 
     <div class="hint" style="margin-bottom:8px">
-        Z 分採 4 路加權：<strong>近 14 天 20%</strong> + <strong>近 30 天 10%</strong> + <strong>2026 整季 60%</strong> + <strong>2025 整季 10%</strong>。
+        Z 分採 3 路加權：<strong>近 14 天 22%</strong> + <strong>近 30 天 11%</strong> + <strong>2026 整季 67%</strong>。
         缺哪個時間窗就由其他幾個按比例補上（傷兵不會被罰）。
         <span class="source-tag">blend</span> 表示有 ≥ 2 個窗有資料。
         <br>
@@ -82,7 +82,7 @@
         <strong>SU</strong>（HLD/BB/K/ERA/WHIP）、<strong>RP</strong>（BB/HLD/SV/K/ERA/WHIP，中繼）。
         各自跟同類比 z，所以 closer 不會被 HLD=0 拖累、setup 不會被 SV=0 拖累。
         <br>
-        雙守位 IP&gt;35 算 SP；IP&lt;10 且 2025 沒數據或 ERA&gt;4 直接排除。
+        雙守位 IP&gt;35 算 SP；IP&lt;10 直接排除（僅看當季數據）。
     </div>
 
     <div class="tbl-wrap" id="rnk-wrap" style="display:none">
@@ -199,7 +199,6 @@ function sourceLabel(src) {
     if (src === 'L14')  return '14d';
     if (src === 'L30')  return '30d';
     if (src === '2026') return '26';
-    if (src === '2025') return '25';
     if (src === 'blend') return 'blend';
     return src || '—';
 }

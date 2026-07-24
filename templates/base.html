@@ -15,6 +15,11 @@
     var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     var theme = saved || (prefersDark ? 'dark' : 'light');
     document.documentElement.setAttribute('data-theme', theme);
+    // Enable scroll-reveal only when motion is allowed; guards against FOUC.
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!reduce && 'IntersectionObserver' in window) {
+        document.documentElement.classList.add('js-anim');
+    }
 })();
 </script>
 </head>
@@ -64,7 +69,7 @@
 </main>
 
 <footer class="footer">
-    EST · 2026 SEASON · TOPPS-STYLE EDITION
+    ◆ EST · 2026 SEASON · TOPPS-STYLE EDITION ◆
 </footer>
 
 <script>
@@ -83,6 +88,31 @@
         localStorage.setItem('mlb-theme', next);
         syncIcon();
     });
+
+    // Sticky top bar gains a stronger shadow once the page scrolls.
+    var topbar = document.querySelector('.topbar');
+    if (topbar) {
+        var onScroll = function() {
+            topbar.classList.toggle('scrolled', window.scrollY > 4);
+        };
+        onScroll();
+        window.addEventListener('scroll', onScroll, { passive: true });
+    }
+
+    // Scroll-reveal cards (progressive enhancement).
+    if (document.documentElement.classList.contains('js-anim')) {
+        var cards = document.querySelectorAll('.card');
+        var io = new IntersectionObserver(function(entries, obs) {
+            entries.forEach(function(e) {
+                if (e.isIntersecting) { e.target.classList.add('revealed'); obs.unobserve(e.target); }
+            });
+        }, { rootMargin: '0px 0px -8% 0px', threshold: 0.05 });
+        cards.forEach(function(c) { io.observe(c); });
+        // Safety net: reveal anything still hidden after 1.2s.
+        setTimeout(function() {
+            document.querySelectorAll('.card:not(.revealed)').forEach(function(c) { c.classList.add('revealed'); });
+        }, 1200);
+    }
 })();
 </script>
 

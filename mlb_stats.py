@@ -1,6 +1,8 @@
 """
 Fetch season stats from MLB Stats API (free, no auth required).
 Index by player full name. Paginated to get all players.
+
+Current season focus (2025 data completely removed).
 """
 import requests
 
@@ -15,7 +17,7 @@ MILB_SPORTS = {
 }
 
 
-def _fetch_all(group, season=2025, sport_id=1):
+def _fetch_all(group, season=2026, sport_id=1):
     """Fetch all season-stat splits for a (group, season, sport_id).
 
     sport_id 1 = MLB; 11/12/13/14 = AAA/AA/A+/A (see MILB_SPORTS).
@@ -278,7 +280,7 @@ def _hitter_row(split, min_g, min_pa):
     }
 
 
-def get_hitting_stats_by_name(season=2025):
+def get_hitting_stats_by_name(season=2026):
     """Return {norm_name: stat_dict} for hitters with meaningful playing time.
     Defensively filters out pitchers (who can appear with G > 0 but PA = 0
     in the hitting endpoint) — without this they leak into the batter pool.
@@ -355,7 +357,7 @@ def _pitcher_row(split, min_ip):
     }
 
 
-def get_pitching_stats_by_name(season=2025):
+def get_pitching_stats_by_name(season=2026):
     """Return {norm_name: stat_dict} for pitchers with ≥2 IP in the season."""
     result = {}
     for split in _fetch_all("pitching", season):
@@ -563,37 +565,25 @@ _merged_hitting_cache  = {}
 _merged_pitching_cache = {}
 
 
-def get_hitting_stats_merged(current=2026, fallback=2025):
-    """Prefer current-season stats (≥5 games), fall back to previous season.
-    Always uses current-season positions regardless of game count.
-    Memoized per (current, fallback) pair."""
-    key = (current, fallback)
+def get_hitting_stats_merged(current=2026):
+    """Return hitting stats for the current season (no historical fallback).
+    Kept for backward compatibility with callers; now purely current season."""
+    key = (current,)
     if key in _merged_hitting_cache:
         return _merged_hitting_cache[key]
-    cur  = get_hitting_stats_by_name(current)
-    prev = get_hitting_stats_by_name(fallback)
-    result = {k: dict(v) for k, v in prev.items()}
-    for name, s in cur.items():
-        if (s.get("G") or 0) >= 5:
-            result[name] = dict(s)
+    result = {k: dict(v) for k, v in get_hitting_stats_by_name(current).items()}
     _apply_positions(result, get_player_positions(current))
     _merged_hitting_cache[key] = result
     return result
 
 
-def get_pitching_stats_merged(current=2026, fallback=2025):
-    """Prefer current-season stats (≥2 IP), fall back to previous season.
-    Always uses current-season positions regardless of IP.
-    Memoized per (current, fallback) pair."""
-    key = (current, fallback)
+def get_pitching_stats_merged(current=2026):
+    """Return pitching stats for the current season (no historical fallback).
+    Kept for backward compatibility with callers; now purely current season."""
+    key = (current,)
     if key in _merged_pitching_cache:
         return _merged_pitching_cache[key]
-    cur  = get_pitching_stats_by_name(current)
-    prev = get_pitching_stats_by_name(fallback)
-    result = {k: dict(v) for k, v in prev.items()}
-    for name, s in cur.items():
-        if (s.get("IP") or 0) >= 2:
-            result[name] = dict(s)
+    result = {k: dict(v) for k, v in get_pitching_stats_by_name(current).items()}
     _apply_positions(result, get_player_positions(current))
     _merged_pitching_cache[key] = result
     return result
@@ -604,7 +594,7 @@ _hot_cache = {}
 
 def get_hot_players(days=7, season=2026, limit=8):
     """Fetch hottest hitters and pitchers from last X days.
-    Falls back to 2025 season top performers if pre-season / no data.
+    Falls back to full current season if no recent activity data.
     Cached per (date, days, season, limit) so multiple page loads in the
     same day reuse the result."""
     from datetime import date, timedelta
@@ -637,9 +627,10 @@ def get_hot_players(days=7, season=2026, limit=8):
     pit_splits = fetch_recent("pitching")
 
     if not hit_splits and not pit_splits:
-        hit_splits = _fetch_all("hitting", 2025)
-        pit_splits = _fetch_all("pitching", 2025)
-        source = "2025 整季"
+        # No recent data: fall back to full current season leaders as source
+        hit_splits = _fetch_all("hitting", season)
+        pit_splits = _fetch_all("pitching", season)
+        source = f"{season} 整季"
     else:
         source = f"{start_str} – {end_str}"
 

@@ -243,7 +243,7 @@ def get_current_matchup(team_key):
 # ── Roster + Stats ─────────────────────────────────────────────
 
 def get_team_roster_with_stats(team_key):
-    """Roster with merged 2026/2025 stats from MLB Stats API (matched by name)."""
+    """Roster with current season (2026) stats from MLB Stats API (matched by name)."""
     import mlb_stats
     hitting  = mlb_stats.get_hitting_stats_merged()
     pitching = mlb_stats.get_pitching_stats_merged()
