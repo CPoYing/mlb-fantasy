@@ -1,6 +1,6 @@
 """
-Compute 7×7 H2H z-score values for every MLB player, blending across
-four time windows so recent form weighs in without ignoring track record.
+Compute 7×7 H2H z-score values for every MLB player, blending recent form
+with full current-season stats (2025 data has been completely removed).
 
 League categories (per 菜政宜的秘密花園):
   Batting:  HR, RBI, SB, AVG, OBP, OPS, E         (E lower-better)
@@ -14,22 +14,19 @@ are scored against their own role's norm pool:
 
   Lower-better in either role: BB, ERA, WHIP
 
-Role classification (uses full-season 2025+2026 GS/IP, not the short windows):
-  - GS_total == 0  → pure RP
-  - GS_total > 0 AND max(IP_2025, IP_2026) > 35  → SP
-  - otherwise (spot starter who didn't accumulate volume)  → RP
+Role classification (uses current season GS/IP only):
+  - GS >= SP_MIN_STARTS AND IP > SP_IP_THRESHOLD  → SP
+  - otherwise → RP (closer/setup detection uses current season)
 
 Junk-pitcher exclusion:
-  - IP_2026 < 10 AND (no 2025 data OR 2025 ERA > 4)  → excluded entirely
+  - IP_current < 10  → excluded entirely
 
 Z-score blend (per cat, per player):
-    z = 0.20·z_14d + 0.10·z_30d + 0.60·z_2026 + 0.10·z_2025
-  Norms are built independently within each window (so a 14d z compares
-  to the 14d qualified pool). If some windows are missing data for a
-  player, the available weights renormalize so we don't penalize him for
-  not having a 2025 line or for being injured for the last two weeks.
+    z = 0.222·z_14d + 0.111·z_30d + 0.667·z_2026
+  Norms are built independently within each window. If some windows are
+  missing data for a player, the available weights renormalize.
 
-  Display stats prefer the longest available window: 2026 full > L30 > L14 > 2025.
+  Display stats prefer: 2026 full > L30 > L14.
   `source` label is "blend" if ≥ 2 windows contributed, else the single window.
 """
 import statistics
@@ -55,10 +52,9 @@ LOWER_BETTER  = {"E", "BB", "ERA", "WHIP", "BB9", "FIP"}
 # ── Blend weights (sum to 1.0) ────────────────────────────────
 
 WEIGHTS = {
-    "L14":  0.20,
-    "L30":  0.10,
-    "2026": 0.60,
-    "2025": 0.10,
+    "L14":  0.222,   # 近 14 天：原 4 路 0.20，2025 的 0.10 按 20:10:60 比例分回
+    "L30":  0.111,   # 近 30 天：原 0.10
+    "2026": 0.667,   # 2026 整季：原 0.60（2025 整季已完全移除）
 }
 
 # ── Norm-pool thresholds per window ──
@@ -69,19 +65,16 @@ HITTER_NORM_THRESHOLDS = {
     "L14":  ("PA", 30),
     "L30":  ("PA", 60),
     "2026": ("G",  25),
-    "2025": ("G",  30),
 }
 SP_NORM_THRESHOLDS = {
     "L14":  ("IP", 8),
     "L30":  ("IP", 18),
     "2026": ("IP", 30),
-    "2025": ("IP", 100),
 }
 RP_NORM_THRESHOLDS = {
     "L14":  ("IP", 4),
     "L30":  ("IP", 8),
     "2026": ("IP", 8),
-    "2025": ("IP", 25),
 }
 
 # ── Role classification ──
@@ -148,38 +141,27 @@ def _blend_multi(per_window):
 
 # ── Pitcher classification + tier ──
 
-def _classify_sp(s_2026, s_2025):
-    """Pure RP if fewer than SP_MIN_STARTS combined starts (a spot starter
-    or emergency long reliever doesn't graduate to SP just because they
-    accumulated relief innings). Otherwise an SP needs max-season IP > 35
-    so a guy with 4 spot-start games per year isn't called SP."""
-    gs_now  = (s_2026.get("GS") if s_2026 else 0) or 0
-    gs_prev = (s_2025.get("GS") if s_2025 else 0) or 0
-    if gs_now + gs_prev < SP_MIN_STARTS:
+def _classify_sp(s_2026):
+    """SP if enough starts in current season AND sufficient IP volume.
+    Otherwise treated as RP (spot starters / long relievers stay RP)."""
+    gs = (s_2026.get("GS") if s_2026 else 0) or 0
+    if gs < SP_MIN_STARTS:
         return False
-    ip_now  = (s_2026.get("IP") if s_2026 else 0) or 0
-    ip_prev = (s_2025.get("IP") if s_2025 else 0) or 0
-    return max(ip_now, ip_prev) > SP_IP_THRESHOLD
+    ip = (s_2026.get("IP") if s_2026 else 0) or 0
+    return ip > SP_IP_THRESHOLD
 
 
-def _exclude_junk_pitcher(s_2026, s_2025):
-    ip_now = (s_2026.get("IP") if s_2026 else 0) or 0
-    if ip_now >= 10:
-        return False
-    if not s_2025:
-        return True
-    era_25 = s_2025.get("ERA")
-    return era_25 is None or era_25 > 4.0
+def _exclude_junk_pitcher(s_2026):
+    ip = (s_2026.get("IP") if s_2026 else 0) or 0
+    return ip < 10
 
 
-def _rp_tier(s_2026, s_2025):
-    sv_prev  = (s_2025.get("SV")  if s_2025 else 0) or 0
-    hld_prev = (s_2025.get("HLD") if s_2025 else 0) or 0
+def _rp_tier(s_2026):
     sv_now   = ((s_2026.get("SV")  or 0) * SEASON_PRORATE_FACTOR) if s_2026 else 0
     hld_now  = ((s_2026.get("HLD") or 0) * SEASON_PRORATE_FACTOR) if s_2026 else 0
-    if max(sv_prev, sv_now) >= RP_CLOSER_SV:
+    if sv_now >= RP_CLOSER_SV:
         return "closer"
-    if max(hld_prev, hld_now) >= RP_SETUP_HLD:
+    if hld_now >= RP_SETUP_HLD:
         return "setup"
     return "middle"
 
@@ -223,11 +205,10 @@ def _score_group(windows_data, cats, is_batter, norm_thresholds):
         if not cat_z:
             continue
 
-        # Prefer 2026 full-season stats for display; cascade if missing.
+        # Prefer current full-season stats for display; cascade if missing.
         display_stats = (windows_data.get("2026", {}).get(name)
                          or windows_data.get("L30", {}).get(name)
                          or windows_data.get("L14", {}).get(name)
-                         or windows_data.get("2025", {}).get(name)
                          or {})
 
         present = [w for w in WEIGHTS if name in windows_data.get(w, {})]
@@ -245,10 +226,9 @@ def _score_group(windows_data, cats, is_batter, norm_thresholds):
 
 
 def _score_pitchers(p_windows):
-    """Split pitchers into SP / CP / SU / RP (middle) using full-season
+    """Split pitchers into SP / CP / SU / RP (middle) using current-season
     totals + tier inference, then score each role within its own pool
     using only that role's relevant cats."""
-    p_2025 = p_windows.get("2025", {})
     p_2026 = p_windows.get("2026", {})
 
     buckets = {
@@ -258,15 +238,13 @@ def _score_pitchers(p_windows):
         "RP": {w: {} for w in WEIGHTS},
     }
 
-    for name in set(p_2025) | set(p_2026):
-        s_now  = p_2026.get(name)
-        s_prev = p_2025.get(name)
-        if _exclude_junk_pitcher(s_now, s_prev):
+    for name, s_now in p_2026.items():
+        if _exclude_junk_pitcher(s_now):
             continue
-        if _classify_sp(s_now, s_prev):
+        if _classify_sp(s_now):
             role = "SP"
         else:
-            tier = _rp_tier(s_now, s_prev)
+            tier = _rp_tier(s_now)
             role = {"closer": "CP", "setup": "SU"}.get(tier, "RP")
         target = buckets[role]
         for window in WEIGHTS:
@@ -306,13 +284,11 @@ def compute_player_values():
         "L14":  mlb_stats.get_hitting_last_n_days(14),
         "L30":  mlb_stats.get_hitting_last_n_days(30),
         "2026": mlb_stats.get_hitting_stats_by_name(2026),
-        "2025": mlb_stats.get_hitting_stats_by_name(2025),
     }
     p_windows = {
         "L14":  mlb_stats.get_pitching_last_n_days(14),
         "L30":  mlb_stats.get_pitching_last_n_days(30),
         "2026": mlb_stats.get_pitching_stats_by_name(2026),
-        "2025": mlb_stats.get_pitching_stats_by_name(2025),
     }
 
     batter_values  = _score_group(h_windows, BATTING_CATS, True, HITTER_NORM_THRESHOLDS)
