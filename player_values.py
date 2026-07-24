@@ -25,11 +25,11 @@ Junk-pitcher exclusion:
      但有好的 2025 成績就留下，現在改用低 IP 門檻近似同效果。)
 
 Z-score blend (per cat, per player):
-    z = 0.222·z_14d + 0.111·z_30d + 0.667·z_2026
+    z = 0.07·z_7d + 0.18·z_14d + 0.25·z_30d + 0.50·z_2026
   Norms are built independently within each window. If some windows are
   missing data for a player, the available weights renormalize.
 
-  Display stats prefer: 2026 full > L30 > L14.
+  Display stats prefer: 2026 full > L30 > L14 > L7.
   `source` label is "blend" if ≥ 2 windows contributed, else the single window.
 """
 import statistics
@@ -55,9 +55,10 @@ LOWER_BETTER  = {"E", "BB", "ERA", "WHIP", "BB9", "FIP"}
 # ── Blend weights (sum to 1.0) ────────────────────────────────
 
 WEIGHTS = {
-    "L14":  0.222,   # 近 14 天：原 4 路 0.20，2025 的 0.10 按 20:10:60 比例分回
-    "L30":  0.111,   # 近 30 天：原 0.10
-    "2026": 0.667,   # 2026 整季：原 0.60（2025 整季已完全移除）
+    "L7":   0.07,   # 近 7 天
+    "L14":  0.18,   # 近 14 天
+    "L30":  0.25,   # 近 30 天
+    "2026": 0.50,   # 2026 整季
 }
 
 # ── Norm-pool thresholds per window ──
@@ -65,16 +66,19 @@ WEIGHTS = {
 #   don't poison the league mean/std.
 
 HITTER_NORM_THRESHOLDS = {
+    "L7":   ("PA", 15),
     "L14":  ("PA", 30),
     "L30":  ("PA", 60),
     "2026": ("G",  25),
 }
 SP_NORM_THRESHOLDS = {
+    "L7":   ("IP", 4),
     "L14":  ("IP", 8),
     "L30":  ("IP", 18),
     "2026": ("IP", 30),
 }
 RP_NORM_THRESHOLDS = {
+    "L7":   ("IP", 2),
     "L14":  ("IP", 4),
     "L30":  ("IP", 8),
     "2026": ("IP", 8),
@@ -216,6 +220,7 @@ def _score_group(windows_data, cats, is_batter, norm_thresholds):
         display_stats = (windows_data.get("2026", {}).get(name)
                          or windows_data.get("L30", {}).get(name)
                          or windows_data.get("L14", {}).get(name)
+                         or windows_data.get("L7", {}).get(name)
                          or {})
 
         present = [w for w in WEIGHTS if name in windows_data.get(w, {})]
@@ -288,11 +293,13 @@ def compute_player_values():
         return _values_cache
 
     h_windows = {
+        "L7":   mlb_stats.get_hitting_last_n_days(7),
         "L14":  mlb_stats.get_hitting_last_n_days(14),
         "L30":  mlb_stats.get_hitting_last_n_days(30),
         "2026": mlb_stats.get_hitting_stats_by_name(2026),
     }
     p_windows = {
+        "L7":   mlb_stats.get_pitching_last_n_days(7),
         "L14":  mlb_stats.get_pitching_last_n_days(14),
         "L30":  mlb_stats.get_pitching_last_n_days(30),
         "2026": mlb_stats.get_pitching_stats_by_name(2026),

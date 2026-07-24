@@ -74,7 +74,7 @@
     </div>
 
     <div class="hint" style="margin-bottom:8px">
-        Z 分採 3 路加權：<strong>近 14 天 22%</strong> + <strong>近 30 天 11%</strong> + <strong>2026 整季 67%</strong>。
+        Z 分採 4 路加權：<strong>近 7 天 7%</strong> + <strong>近 14 天 18%</strong> + <strong>近 30 天 25%</strong> + <strong>2026 整季 50%</strong>。
         缺哪個時間窗就由其他幾個按比例補上（傷兵不會被罰）。
         <span class="source-tag">blend</span> 表示有 ≥ 2 個窗有資料。
         <br>
@@ -196,6 +196,7 @@ function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 function sourceLabel(src) {
+    if (src === 'L7')   return '7d';
     if (src === 'L14')  return '14d';
     if (src === 'L30')  return '30d';
     if (src === '2026') return '26';
