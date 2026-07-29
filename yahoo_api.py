@@ -49,7 +49,9 @@ def api_get(path, params=None):
         params = {}
     params["format"] = "json"
     r = requests.get(f"{BASE_URL}{path}", headers=get_headers(), params=params)
-    if r.status_code == 401:
+    # Yahoo 對過期的 access token 有時回 403（不是 401），兩者都要自動刷新重試。
+    # 若刷新後仍被拒（真正的權限問題），下面 raise_for_status() 會拋出。
+    if r.status_code in (401, 403):
         refresh_token_if_needed()
         r = requests.get(f"{BASE_URL}{path}", headers=get_headers(), params=params)
     r.raise_for_status()
